@@ -1,0 +1,23 @@
+# Netlify: static SPA from Vite + serverless feedback API.
+# Production monorepo deploy: the authoritative config is ../netlify.toml at the repo root
+# (build.base = salt_app). This file is kept in sync for `netlify dev` when run from salt_app/.
+# Set SLACK_WEBHOOK_URL, SLACK_BOT_TOKEN, SLACK_FEEDBACK_CHANNEL_ID, GOOGLE_SHEETS_WEBAPP_URL in the Netlify UI (Site configuration → Environment variables).
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+
+# Map same path as local Vite proxy so the client needs no production-only URL.
+[[redirects]]
+  from = "/api/slack-feedback"
+  to = "/.netlify/functions/slack-feedback"
+  status = 200
+
+# SPA fallback (must come after the API rewrite above).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,7 @@
+{
+  "name": "SALT Report",
+  "description": "Main Company Metrics",
+  "version": "0.0.1",
+  "main": "index.html",
+  "iframe": true
+}

@@ -1,0 +1,98 @@
+diff --git a/salt_app/src/hooks/useSigmaData.js b/salt_app/src/hooks/useSigmaData.js
+index 1111111..2222222 100644
+--- a/salt_app/src/hooks/useSigmaData.js
++++ b/salt_app/src/hooks/useSigmaData.js
+@@ -1,6 +1,6 @@
+ // src/hooks/useSigmaData.js
+ 
+-import { useMemo, useEffect } from "react";
++import { useMemo, useEffect } from "react";
+ import { client, useConfig, useElementData, useElementColumns } from "@sigmacomputing/plugin";
+ 
+ import { zipColumnarToRows } from "../utils/data.jsx";
+@@ -176,6 +176,18 @@ function pick(row, keys) {
+   return null;
+ }
+ 
++function isBlank(v) {
++  return v == null || String(v).trim() === "";
++}
++
++function firstNonBlank(...vals) {
++  for (const v of vals) {
++    if (!isBlank(v)) return v;
++  }
++  return null;
++}
++
+ export function useSigmaData(params = {}) {
+   const { cpoAccountId = null, cpoIterableOrgId = null, cpoAccountName = null } = params;
+   const config = useConfig();
+@@ -192,16 +204,18 @@ export function useSigmaData(params = {}) {
+   useEffect(() => {
+     const setVal = (name, value) => {
+       try {
+         // Try common client APIs (Sigma plugin APIs vary by embed/version)
+-        if (client?.controls?.setValue) return client.controls.setValue(name, value);
+-        if (client?.controls?.set) return client.controls.set(name, value);
++        // ✅ Prefer PARAMETERS first (your SQL uses {{Account-Name}})
+         if (client?.parameters?.set) return client.parameters.set(name, value);
+         if (client?.parameter?.set) return client.parameter.set(name, value);
+         if (client?.setParameter) return client.setParameter(name, value);
++        // ✅ Then try CONTROLS (some embeds expose these instead)
++        if (client?.controls?.setValue) return client.controls.setValue(name, value);
++        if (client?.controls?.set) return client.controls.set(name, value);
+         if (client?.setControlValue) return client.setControlValue(name, value);
+ 
+         // eslint-disable-next-line no-console
+@@ -214,9 +228,12 @@ export function useSigmaData(params = {}) {
+ 
+     // Prefer iterable org id (more direct), but set both
+     setVal("cpo_iterable_org_id", cpoIterableOrgId || null);
+     setVal("cpo_account_id", cpoAccountId || null);
+-    setVal("Account-Name", cpoAccountName || null);
++    // ✅ Do NOT spam-clear the Sigma parameter; only set when you actually have a value
++    if (!isBlank(cpoAccountName)) {
++      setVal("Account-Name", cpoAccountName);
++    }
+   }, [cpoIterableOrgId, cpoAccountId, cpoAccountName]);
+ 
+   // Configure the Sigma properties panel once
+@@ -256,10 +273,19 @@ export function useSigmaData(params = {}) {
+ 
+     // ✅ FIXED: CPO accounts element name matches editorConfig.js
+     // editorConfig: { name: "cpo_accounts_source", type: "element", ... }
+-    cpoAccounts: config?.cpo_accounts_source,
++    //
++    // 🔥 IMPORTANT:
++    // If your editorConfig key differs (common during refactors),
++    // the hook returns zero rows and the account selector shows “No matches”.
++    // So we provide a fallback chain.
++    cpoAccounts: firstNonBlank(
++      config?.cpo_accounts_source,
++      config?.source_cpo_accounts,
++      config?.source_cpo_accounts_source,
++      config?.cpo_accounts,
++      config?.cpo_accounts_element
++    ),
+   };
+ 
+   // Read element data
+@@ -888,6 +914,20 @@ export function useSigmaData(params = {}) {
+     (sources.revintelTree && !raw.revintelTree) ||
+     (sources.cpoAccounts && !raw.cpoAccounts);
+ 
+-console.log("CPO Accounts Rows:", rows.cpoAccounts?.slice(0, 3));
+-console.log("Calendar Rows:", rows.calendar?.slice(0, 3));
++  // ✅ Debug logs without spamming every render
++  useEffect(() => {
++    // eslint-disable-next-line no-console
++    console.log("[SALT] CPO accounts source:", sources.cpoAccounts);
++    // eslint-disable-next-line no-console
++    console.log("[SALT] CPO Accounts Rows (sample):", rows.cpoAccounts?.slice(0, 3));
++    // eslint-disable-next-line no-console
++    console.log("[SALT] Calendar Rows (sample):", rows.calendar?.slice(0, 3));
++  }, [sources.cpoAccounts, rows.cpoAccounts, rows.calendar]);
+ 
+   return { config, data, rows, columns, isLoading, debugInfo: debugInfoOut };
+ }

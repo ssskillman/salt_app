@@ -1,0 +1,103 @@
+/**
+ * Salt visual shell: Iterable ’26 brand tokens on <html data-salt-brand-theme="iterable">.
+ * (Legacy “status quo” theme toggle was removed; provider always applies Iterable.)
+ */
+
+/*
+ * Header lockup: vector SVG (transparent plate). Legacy = dark ink on mint;
+ * Iterable ’26 = white via filter (no black PNG matte — matches light-lockup intent).
+ */
+img.salt-header-logo {
+  display: block;
+  width: auto;
+  height: 24px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.2));
+}
+
+:root {
+  --salt-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --salt-app-shell-bg: linear-gradient(135deg, #59c1a7 0%, #4fbba7 45%, #43b4ab 100%);
+  --salt-loading-bg: #59c1a7;
+
+  --salt-header-meta-dot: #3b82f6;
+  --salt-header-meta-dot-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25), 0 0 8px rgba(59, 130, 246, 0.55);
+
+  --salt-surface-bg: rgba(243, 246, 250, 0.92);
+  --salt-surface-border: 1px solid rgba(255, 255, 255, 0.35);
+  --salt-surface-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
+
+  --salt-text-strong: rgba(15, 23, 42, 0.95);
+  --salt-text-muted: rgba(15, 23, 42, 0.75);
+  --salt-text-icon: rgba(15, 23, 42, 0.82);
+
+  --salt-chart-won: #60a5fa;
+  --salt-chart-open: #00c2b2;
+  --salt-chart-lost: #ff6b6b;
+
+  --salt-delta-pos-color: rgba(16, 120, 87, 0.92);
+  --salt-delta-pos-bg: rgba(16, 120, 87, 0.1);
+  --salt-delta-neg-color: rgba(185, 28, 28, 0.9);
+  --salt-delta-neg-bg: rgba(185, 28, 28, 0.08);
+  --salt-delta-neutral-color: rgba(15, 23, 42, 0.62);
+  --salt-delta-neutral-bg: rgba(15, 23, 42, 0.06);
+
+  --salt-card-bg: rgba(255, 255, 255, 0.96);
+  --salt-card-border: 1px solid rgba(15, 23, 42, 0.1);
+  --salt-card-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+  --salt-card-shadow-hover: 0 10px 24px rgba(0, 0, 0, 0.1);
+  --salt-card-panel-bg: rgba(255, 255, 255, 0.98);
+  --salt-card-panel-border: 1px solid rgba(15, 23, 42, 0.12);
+  --salt-card-scrim: rgba(15, 23, 42, 0.05);
+  --salt-card-edge: rgba(15, 23, 42, 0.16);
+  --salt-card-chev-border: 1px solid rgba(15, 23, 42, 0.16);
+  --salt-card-chev-bg: rgba(255, 255, 255, 0.85);
+}
+
+[data-salt-brand-theme="iterable"] img.salt-header-logo {
+  height: 28px;
+  filter: brightness(0) invert(1) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.45))
+    drop-shadow(0 0 14px rgba(255, 255, 255, 0.28));
+}
+
+[data-salt-brand-theme="iterable"] {
+  --salt-font-sans: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+
+  --salt-app-shell-bg: linear-gradient(135deg, #005a72 0%, #2c8798 42%, #399d89 100%);
+  --salt-loading-bg: #005a72;
+
+  --salt-header-meta-dot: #d5ff9f;
+  --salt-header-meta-dot-shadow: 0 0 0 3px rgba(213, 255, 159, 0.35), 0 0 12px rgba(213, 255, 159, 0.42);
+
+  --salt-surface-bg: rgba(255, 250, 246, 0.94);
+  --salt-surface-border: 1px solid rgba(0, 90, 114, 0.14);
+  --salt-surface-shadow: 0 18px 44px rgba(22, 15, 41, 0.14);
+
+  --salt-text-strong: rgba(22, 15, 41, 0.96);
+  --salt-text-muted: rgba(22, 15, 41, 0.72);
+  --salt-text-icon: rgba(22, 15, 41, 0.78);
+
+  --salt-chart-won: #2c8798;
+  --salt-chart-open: #399d89;
+  /* Slightly deeper than guideline coral for chart legibility on warm white */
+  --salt-chart-lost: #c24133;
+
+  --salt-delta-pos-color: rgba(57, 157, 137, 0.98);
+  --salt-delta-pos-bg: rgba(150, 207, 174, 0.35);
+  --salt-delta-neg-color: rgba(194, 65, 51, 0.95);
+  --salt-delta-neg-bg: rgba(255, 191, 170, 0.45);
+  --salt-delta-neutral-color: rgba(22, 15, 41, 0.58);
+  --salt-delta-neutral-bg: rgba(22, 15, 41, 0.06);
+
+  --salt-card-bg: rgba(255, 250, 246, 0.98);
+  --salt-card-border: 1px solid rgba(0, 90, 114, 0.12);
+  --salt-card-shadow: 0 6px 16px rgba(22, 15, 41, 0.08);
+  --salt-card-shadow-hover: 0 12px 28px rgba(22, 15, 41, 0.12);
+  --salt-card-panel-bg: rgba(255, 252, 248, 0.98);
+  --salt-card-panel-border: 1px solid rgba(0, 90, 114, 0.14);
+  --salt-card-scrim: rgba(22, 15, 41, 0.06);
+  --salt-card-edge: rgba(0, 90, 114, 0.18);
+  --salt-card-chev-border: 1px solid rgba(0, 90, 114, 0.18);
+  --salt-card-chev-bg: rgba(255, 250, 246, 0.92);
+}
