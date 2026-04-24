@@ -1051,6 +1051,10 @@ function BusinessLineToggle({ value, onChange }) {
   );
 }
 
+/** Tooltip copy for Stage 4+ coverage WIP (company card + AE threshold card). */
+const STAGE4_COMMIT_DATA_WIP_NOTE =
+  "We need commit data for New Business and Gross Expansion to complete this calculation.";
+
 export default function App() {
   const goToPrevFieldExecutionInsight = () => {
     if (!fieldExecutionInsightItems.length) return;
@@ -4710,7 +4714,12 @@ const productMixDrillRows = useMemo(() => {
                   title="Click to view CAGR inputs + formula"
                 />
 
-                <MetricCard label="Stage 4+ Coverage" value={fmtX(companyStage4Value)} />
+                <MetricCard
+                  label="Stage 4+ Coverage"
+                  value={fmtX(companyStage4Value)}
+                  isWip
+                  title={STAGE4_COMMIT_DATA_WIP_NOTE}
+                />
 
                 <MetricCard
                   label="Velocity"
@@ -5463,7 +5472,8 @@ const productMixDrillRows = useMemo(() => {
                       }
                       value={aePerfCounts.overThreshold}
                       onClick={() => openAeDrill(aeStage4CovMetricTitle(aeStage4CovMult))}
-                      title={`Click to drill AEs at or above ${formatAeStage4CovMult(
+                      isWip
+                      title={`(${STAGE4_COMMIT_DATA_WIP_NOTE}) Click to drill AEs at or above ${formatAeStage4CovMult(
                         aeStage4CovMult
                       )} Stage 4+ coverage (non‑negative). Drag the handle (shows ${formatAeStage4CovMult(
                         aeStage4CovMult

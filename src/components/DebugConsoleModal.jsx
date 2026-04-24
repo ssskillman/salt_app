@@ -1,6 +1,8 @@
 // src/components/DebugConsoleModal.jsx
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { client } from "@sigmacomputing/plugin";
 import Modal from "./ui/Modal";
+import { editorConfig } from "../app/editorConfig";
 
 // -----------------------------
 // Small helpers
@@ -11,6 +13,205 @@ function safeJson(x) {
   } catch {
     return String(x);
   }
+}
+
+/** TSV cell: no tabs or newlines */
+function tsvCell(s) {
+  return String(s ?? "")
+    .replace(/\t/g, " ")
+    .replace(/\r?\n/g, " ");
+}
+
+function serializeSigmaConfigValue(v) {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/**
+ * Full backup of Sigma plugin panel values vs editorConfig (for spreadsheets + JSON archive).
+ * Paste TSV into Google Sheets; use JSON as a machine-readable snapshot when rebuilding a workbook.
+ */
+export function buildSigmaMappingExport(config) {
+  const cfg = config && typeof config === "object" && !Array.isArray(config) ? config : {};
+  const exportedAt = new Date().toISOString();
+  const lines = [];
+
+  lines.push("# SALT — Sigma workbook → editorConfig export");
+  lines.push(`# exportedAt: ${exportedAt}`);
+  lines.push("# Block 1: TSV (tab-separated). Paste into a spreadsheet.");
+  lines.push("");
+  lines.push(["name", "label", "type", "source", "sigma_value"].join("\t"));
+
+  const editorNames = new Set();
+  for (const entry of editorConfig) {
+    if (!entry || typeof entry.name !== "string" || !entry.name.trim()) continue;
+    editorNames.add(entry.name);
+    const raw = Object.prototype.hasOwnProperty.call(cfg, entry.name) ? cfg[entry.name] : null;
+    lines.push(
+      [
+        tsvCell(entry.name),
+        tsvCell(entry.label),
+        tsvCell(entry.type),
+        tsvCell(entry.source),
+        tsvCell(serializeSigmaConfigValue(raw)),
+      ].join("\t")
+    );
+  }
+
+  const workbookOnlyKeys = Object.keys(cfg)
+    .filter((k) => !editorNames.has(k))
+    .sort();
+  if (workbookOnlyKeys.length) {
+    lines.push("");
+    lines.push("# --- Present in this workbook but not in editorConfig.js (legacy / drift) ---");
+    lines.push(["name", "label", "type", "source", "sigma_value"].join("\t"));
+    for (const k of workbookOnlyKeys) {
+      lines.push([tsvCell(k), "", "", "", tsvCell(serializeSigmaConfigValue(cfg[k]))].join("\t"));
+    }
+  }
+
+  const mappings = {};
+  for (const entry of editorConfig) {
+    if (!entry || typeof entry.name !== "string" || !entry.name.trim()) continue;
+    mappings[entry.name] = Object.prototype.hasOwnProperty.call(cfg, entry.name) ? cfg[entry.name] : null;
+  }
+
+  const extra = {};
+  for (const k of workbookOnlyKeys) {
+    extra[k] = cfg[k];
+  }
+
+  lines.push("");
+  lines.push("# --- Block 2: JSON (same workbook; null = not set in Sigma for that key) ---");
+  lines.push(
+    safeJson({
+      exportedAt,
+      mappings,
+      workbookOnlyKeys: Object.keys(extra).length ? extra : undefined,
+    })
+  );
+
+  return lines.join("\n");
+}
+
+/**
+ * Sigma runs the plugin in an iframe; `navigator.clipboard` is often denied there.
+ * `document.execCommand("copy")` from the same user gesture usually still works.
+ */
+function copyTextViaExecCommand(text) {
+  if (typeof document === "undefined") return false;
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.setAttribute("aria-hidden", "true");
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  ta.style.top = "0";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+/** Try execCommand first (iframe-friendly), then async Clipboard API. */
+function copyTextToClipboardRobust(text) {
+  if (copyTextViaExecCommand(text)) {
+    return Promise.resolve(true);
+  }
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+  }
+  return Promise.resolve(false);
+}
+
+/** Pull the JSON object from a full “TSV + # --- Block 2” export (or return null). */
+function extractJsonObjectFromFullExport(full) {
+  const s = String(full);
+  const marker = "# --- Block 2: JSON";
+  const mi = s.indexOf(marker);
+  const startSearch = mi >= 0 ? mi : 0;
+  const brace = s.indexOf("{", startSearch);
+  if (brace < 0) return null;
+  let depth = 0;
+  for (let i = brace; i < s.length; i++) {
+    const c = s[i];
+    if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) return s.slice(brace, i + 1);
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse pasted export JSON into a plain object for `client.config.set()`.
+ * Accepts: our export wrapper `{ exportedAt, mappings, workbookOnlyKeys }`, a bare `{ mappings }`,
+ * or a flat `{ source_detail: "…", … }`. Omits null/undefined so Sigma does not get empty clears unless intended.
+ */
+export function parseSigmaConfigImportPaste(raw) {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) {
+    throw new Error("Paste export JSON first.");
+  }
+  let jsonStr = trimmed;
+  if (!trimmed.startsWith("{")) {
+    const extracted = extractJsonObjectFromFullExport(trimmed);
+    if (!extracted) {
+      throw new Error('Could not find JSON. Paste the block starting with "{" (or the full TSV+JSON export).');
+    }
+    jsonStr = extracted;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    throw new Error(`Invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("JSON root must be an object.");
+  }
+
+  const merged = {};
+  if (parsed.mappings && typeof parsed.mappings === "object" && !Array.isArray(parsed.mappings)) {
+    Object.assign(merged, parsed.mappings);
+  }
+  if (
+    parsed.workbookOnlyKeys &&
+    typeof parsed.workbookOnlyKeys === "object" &&
+    !Array.isArray(parsed.workbookOnlyKeys)
+  ) {
+    Object.assign(merged, parsed.workbookOnlyKeys);
+  }
+  if (Object.keys(merged).length === 0) {
+    for (const [k, v] of Object.entries(parsed)) {
+      if (k === "exportedAt" || k === "mappings" || k === "workbookOnlyKeys") continue;
+      merged[k] = v;
+    }
+  }
+
+  const out = {};
+  for (const [k, v] of Object.entries(merged)) {
+    if (v !== null && v !== undefined) out[k] = v;
+  }
+  if (Object.keys(out).length === 0) {
+    throw new Error("No non-null mapping keys to apply.");
+  }
+  return out;
 }
 
 function clip(v, n = 120) {
@@ -487,10 +688,20 @@ function Table({ columns, rows }) {
     const PAGE_SIZE = 10;
     const [logPage, setLogPage] = useState(0);
     const [logSearch, setLogSearch] = useState("");
+    const [mappingCopyStatus, setMappingCopyStatus] = useState(null);
+    const [mappingExportText, setMappingExportText] = useState("");
+    const [mappingManualOpen, setMappingManualOpen] = useState(false);
+    const mappingExportRef = useRef(null);
+    const [configImportPaste, setConfigImportPaste] = useState("");
+    const [configImportStatus, setConfigImportStatus] = useState(null);
 
     useEffect(() => {
       if (!open) return;
       setLogPage(0);
+    }, [open]);
+
+    useEffect(() => {
+      if (!open) setConfigImportStatus(null);
     }, [open]);
 
     useEffect(() => {
@@ -526,6 +737,58 @@ function Table({ columns, rows }) {
       const end = start + PAGE_SIZE;
       return filteredLogs.slice(start, end);
     }, [filteredLogs, logPage]);
+
+    const handleCopySigmaMappingExport = useCallback(() => {
+      const text = buildSigmaMappingExport(config);
+      setMappingExportText(text);
+
+      void (async () => {
+        const ok = await copyTextToClipboardRobust(text);
+        if (ok) {
+          setMappingCopyStatus("Copied to clipboard");
+          setMappingManualOpen(false);
+          window.setTimeout(() => setMappingCopyStatus(null), 2500);
+        } else {
+          setMappingCopyStatus("Clipboard blocked here — select the text below, then ⌘C / Ctrl+C");
+          setMappingManualOpen(true);
+          window.setTimeout(() => setMappingCopyStatus(null), 8000);
+        }
+      })();
+    }, [config]);
+
+    useEffect(() => {
+      if (!mappingManualOpen) return;
+      const t = window.setTimeout(() => {
+        const el = mappingExportRef.current;
+        if (el) {
+          el.focus();
+          el.select();
+        }
+      }, 50);
+      return () => window.clearTimeout(t);
+    }, [mappingManualOpen]);
+
+    const handleApplySigmaConfigImport = useCallback(() => {
+      setConfigImportStatus(null);
+      try {
+        const payload = parseSigmaConfigImportPaste(configImportPaste);
+        if (typeof client?.config?.set !== "function") {
+          setConfigImportStatus("Sigma client.config.set is not available in this build.");
+          return;
+        }
+        try {
+          client.config.set(payload);
+        } catch (err) {
+          setConfigImportStatus(
+            err instanceof Error ? err.message : "Sigma rejected config.set (check edit permissions / ids)."
+          );
+          return;
+        }
+        setConfigImportStatus(`Applied ${Object.keys(payload).length} keys (merged into this plugin's Sigma config).`);
+      } catch (e) {
+        setConfigImportStatus(e instanceof Error ? e.message : String(e));
+      }
+    }, [configImportPaste]);
 
     const showingStart = totalLogs === 0 ? 0 : logPage * PAGE_SIZE + 1;
     const showingEnd = Math.min((logPage + 1) * PAGE_SIZE, totalLogs);
@@ -795,6 +1058,95 @@ function Table({ columns, rows }) {
             <Pill tone="bad">Unmapped: {derived.totals.unmappedCount}</Pill>
           </div>
           <div style={cardHint}>“Missing” means mapped, but doesn’t exist on row keys.</div>
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle, marginTop: 12 }}>
+        <div style={cardLabel}>Sigma → editorConfig backup</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+          <button type="button" onClick={handleCopySigmaMappingExport}>
+            Copy mapping export (TSV + JSON)
+          </button>
+          {mappingCopyStatus ? (
+            <span style={{ fontSize: 12, fontWeight: 800, color: "rgba(15,23,42,0.65)" }}>{mappingCopyStatus}</span>
+          ) : null}
+        </div>
+        <div style={cardHint}>
+          One clipboard payload: TSV in <code>editorConfig</code> order (paste into Sheets), then a JSON block with{" "}
+          <code>mappings</code> and any <code>workbookOnlyKeys</code>. Re-use when re-wiring a new Sigma workbook. In
+          Sigma’s iframe, automatic copy tries a legacy path first; if it still fails, use the box below.
+        </div>
+        {mappingExportText ? (
+          <details
+            open={mappingManualOpen}
+            onToggle={(e) => setMappingManualOpen(e.currentTarget.open)}
+            style={{ marginTop: 12 }}
+          >
+            <summary style={{ ...summaryStyle, fontSize: 12 }}>Manual copy — export text</summary>
+            <textarea
+              ref={mappingExportRef}
+              readOnly
+              value={mappingExportText}
+              onFocus={(e) => e.target.select()}
+              rows={12}
+              spellCheck={false}
+              style={{
+                marginTop: 8,
+                width: "100%",
+                boxSizing: "border-box",
+                fontSize: 11,
+                lineHeight: 1.35,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                borderRadius: 10,
+                border: "1px solid rgba(15,23,42,0.14)",
+                padding: 10,
+                resize: "vertical",
+                minHeight: 160,
+              }}
+            />
+          </details>
+        ) : null}
+
+        <div
+          style={{
+            marginTop: 16,
+            paddingTop: 14,
+            borderTop: "1px solid rgba(15,23,42,0.08)",
+          }}
+        >
+          <div style={cardLabel}>Apply saved mappings into Sigma</div>
+          <div style={cardHint}>
+            Paste JSON from an export (just the <code>mappings</code> block is fine, or the whole TSV+JSON blob — we
+            locate Block 2). Uses Sigma's <code>client.config.set()</code> shallow merge. Requires edit access
+            (Explorer / author); viewers are often read-only. Only apply exports you trust.
+          </div>
+          <textarea
+            value={configImportPaste}
+            onChange={(e) => setConfigImportPaste(e.target.value)}
+            rows={6}
+            spellCheck={false}
+            placeholder='{"exportedAt":"…","mappings":{"source_detail":"…"}}'
+            style={{
+              marginTop: 8,
+              width: "100%",
+              boxSizing: "border-box",
+              fontSize: 11,
+              lineHeight: 1.35,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              borderRadius: 10,
+              border: "1px solid rgba(15,23,42,0.14)",
+              padding: 10,
+              resize: "vertical",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+            <button type="button" onClick={handleApplySigmaConfigImport}>
+              Apply to Sigma
+            </button>
+            {configImportStatus ? (
+              <span style={{ fontSize: 12, fontWeight: 800, color: "rgba(15,23,42,0.65)" }}>{configImportStatus}</span>
+            ) : null}
+          </div>
         </div>
       </div>
 
