@@ -1,4 +1,13 @@
-# React + Vite
+# SALT / Forecast dashboard (`salt_app`)
+
+React + Vite app embedded as a **Sigma Computing plugin** for the CEO / forecast (“SALT”) dashboard.
+
+**Onboarding (clone, Homebrew, Node, npm, local dev):** see [../docs/analyst-onboarding.md](../docs/analyst-onboarding.md)  
+**Handover checklist:** [../docs/handover-checklist.md](../docs/handover-checklist.md)
+
+---
+
+## React + Vite (template notes)
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

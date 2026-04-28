@@ -36,6 +36,29 @@ function dataUrlToBuffer(dataUrl) {
   return { buffer: buf };
 }
 
+/**
+ * When Netlify (or any server) POSTs to script.google.com/macros/.../exec without a Google login,
+ * a misconfigured Web App returns 401/403 and an HTML sign-in page — not JSON from doPost().
+ */
+function formatGoogleSheetsAppendFailure(status, bodyText) {
+  const t = String(bodyText ?? "");
+  const looksLikeGoogleHtml = /<!DOCTYPE\s+html|<html[\s>]/i.test(t);
+
+  if ((status === 401 || status === 403) && looksLikeGoogleHtml) {
+    return [
+      `Google Sheet append failed (${status}): Google blocked the request before Apps Script ran (HTML sign-in page).`,
+      `Deploy the script as a Web app with “Who has access: Anyone” and “Execute as: Me”, then set GOOGLE_SHEETS_WEBAPP_URL to that deployment’s /exec URL (Manage deployments → copy URL).`,
+      `On Google Workspace, an admin may need to allow external/Anyone web apps for Apps Script.`,
+    ].join(" ");
+  }
+
+  if (status === 401 || status === 403) {
+    return `Google Sheet append failed (${status}). Check Web App access and that GOOGLE_SHEETS_WEBAPP_URL ends with /exec. Response: ${t.slice(0, 200)}`;
+  }
+
+  return `Google Sheet append failed (HTTP ${status}): ${t.slice(0, 240)}`;
+}
+
 function safeFilename(name) {
   const s = String(name || "salt-feedback.png").trim() || "salt-feedback.png";
   const cleaned = s.replace(/[^\w.\-()+ ]+/g, "_").slice(0, 120);
@@ -175,7 +198,7 @@ export async function runSlackFeedbackSubmit(payload, env) {
           const trimmed = sheetText.trim();
 
           if (!sheetRes.ok) {
-            sheetsWarning = `Google Sheet append failed (HTTP ${sheetRes.status}): ${sheetText.slice(0, 240)}`;
+            sheetsWarning = formatGoogleSheetsAppendFailure(sheetRes.status, sheetText);
           } else if (trimmed.startsWith("<")) {
             sheetsWarning =
               "Google Sheet returned HTML (not JSON). Use the deployed Web App URL ending in /exec, deployment “Anyone”, and authorize the script to access the spreadsheet.";

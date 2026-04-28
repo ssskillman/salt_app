@@ -9,10 +9,17 @@ import { createPortal } from "react-dom";
 import Modal from "../ui/Modal";
 import { fmtMoneyCompact, toNumber, ceoBusinessLineDisplayLabel } from "../../utils/formatters.jsx";
 import DrillModalContextBar from "../ui/DrillModalContextBar.jsx";
-
-const HORSEMAN_DRILL_CONTEXT =
-  "Rows match the bar segment you clicked (source or created-by bucket × outcome). Amounts use your mapped ACV field; open pipeline shows stage when relevant.";
 import AnimatedMetricValue from "../ui/AnimatedMetricValue.jsx";
+
+const HORSEMAN_DRILL_CONTEXT_BASE =
+  "Rows match the bar segment you clicked (source or created-by bucket × outcome). " +
+  "ACV is the amount shown for each row; the segment total sums ACV.";
+
+const HORSEMAN_DRILL_CONTEXT_BASIS =
+  " Basis names which spine or JSON field backs that dollar for the bar math.";
+
+/** Won / lost / open-pipe drills omit the Basis column — no helper sentence either. */
+const OUTCOMES_WITHOUT_BASIS_COL = new Set(["won", "lost", "open"]);
 
 const OUTCOME_META = {
   won: {
@@ -441,6 +448,12 @@ export default function HorsemanDrillModal({
   ownerKey,
   stageKey,
   arrKey,
+  /** Sums `rows[segmentTotalKey]` for the subtitle “segment total” (defaults to `barAmountKey` then `arrKey`). */
+  segmentTotalKey = null,
+  /** When set, adds a “Horseman $” column — same grain as the stacked bar for that row. */
+  barAmountKey = null,
+  /** When set, adds a “Basis” column — short label for which field backs the stack dollar. */
+  basisKey = null,
   closeKey,
   dealReviewKey,
   dealReviewShortKey,
@@ -453,6 +466,15 @@ export default function HorsemanDrillModal({
   definitionsSection = "horseman",
   onOpenDefinitions,
 }) {
+  const showHorsemanStackCol = Boolean(barAmountKey);
+  const showHorsemanBasisCol =
+    Boolean(basisKey) && !OUTCOMES_WITHOUT_BASIS_COL.has(String(outcome ?? ""));
+  const totalSumKey = segmentTotalKey || barAmountKey || arrKey;
+
+  const defaultDrillContext =
+    HORSEMAN_DRILL_CONTEXT_BASE +
+    (showHorsemanBasisCol ? HORSEMAN_DRILL_CONTEXT_BASIS : "");
+
   const [sortState, setSortState] = useState({
     key: "arr",
     direction: "desc",
@@ -461,10 +483,13 @@ export default function HorsemanDrillModal({
 
   useEffect(() => {
     if (open) {
-      setSortState({ key: "arr", direction: "desc" });
+      setSortState({
+        key: showHorsemanStackCol ? "horsemanStack" : "arr",
+        direction: "desc",
+      });
       setOpenReviewKey(null);
     }
-  }, [open, source, outcome]);
+  }, [open, source, outcome, showHorsemanStackCol]);
 
   const meta = OUTCOME_META[outcome] || {
     label: "Selected Segment",
@@ -476,8 +501,8 @@ export default function HorsemanDrillModal({
   const showOwnerColumn = fieldScopeIsGlobal || fieldScopeUserCount !== 1;
 
   const total = useMemo(
-    () => rows.reduce((sum, r) => sum + (toNumber(r?.[arrKey]) || 0), 0),
-    [rows, arrKey]
+    () => rows.reduce((sum, r) => sum + (toNumber(r?.[totalSumKey]) || 0), 0),
+    [rows, totalSumKey]
   );
 
   const sortedRows = useMemo(() => {
@@ -500,6 +525,12 @@ export default function HorsemanDrillModal({
           break;
         case "arr":
           cmp = compareMaybeNumber(ra?.[arrKey], rb?.[arrKey]);
+          break;
+        case "horsemanStack":
+          cmp = compareMaybeNumber(
+            barAmountKey ? ra?.[barAmountKey] : null,
+            barAmountKey ? rb?.[barAmountKey] : null
+          );
           break;
         case "closeDate":
           cmp = compareMaybeDate(ra?.[closeKey], rb?.[closeKey]);
@@ -530,6 +561,7 @@ export default function HorsemanDrillModal({
     ownerKey,
     stageKey,
     arrKey,
+    barAmountKey,
     closeKey,
     dealReviewShortKey,
   ]);
@@ -555,6 +587,8 @@ export default function HorsemanDrillModal({
       };
     });
   };
+
+  const extraHorsemanCols = (showHorsemanStackCol ? 1 : 0) + (showHorsemanBasisCol ? 1 : 0);
 
   const SortableHeader = ({ label, sortKey }) => {
     const active = sortState.key === sortKey;
@@ -583,10 +617,10 @@ export default function HorsemanDrillModal({
       }}
       title={`Horseman Drill — ${source || "—"}`}
       subtitle={`${meta.label} • ${rows.length} opportunit${rows.length === 1 ? "y" : "ies"} • ${fmtMoneyCompact(total)}`}
-      width={showStageColumn ? 1460 : 1320}
+      width={(showStageColumn ? 1460 : 1320) + (extraHorsemanCols ? 280 : 0)}
     >
       <DrillModalContextBar
-        helperText={contextHelper ?? HORSEMAN_DRILL_CONTEXT}
+        helperText={contextHelper ?? defaultDrillContext}
         definitionsSection={definitionsSection}
         onOpenDefinitions={onOpenDefinitions}
       />
@@ -653,13 +687,14 @@ export default function HorsemanDrillModal({
         <table
           style={{
             ...styles.table,
-            minWidth: showStageColumn
-              ? showOwnerColumn
-                ? 1240
-                : 1120
-              : showOwnerColumn
-                ? 1100
-                : 980,
+            minWidth:
+              (showStageColumn
+                ? showOwnerColumn
+                  ? 1240
+                  : 1120
+                : showOwnerColumn
+                  ? 1100
+                  : 980) + (extraHorsemanCols ? 280 : 0),
           }}
         >
           <thead>
@@ -672,6 +707,14 @@ export default function HorsemanDrillModal({
                 <SortableHeader label="Stage" sortKey="stage" />
               ) : null}
               <SortableHeader label="ACV" sortKey="arr" />
+              {showHorsemanStackCol ? (
+                <SortableHeader label="Horseman $" sortKey="horsemanStack" />
+              ) : null}
+              {showHorsemanBasisCol ? (
+                <th style={styles.th} title="Field backing the stacked-bar dollar for this row">
+                  Basis
+                </th>
+              ) : null}
               <SortableHeader label="Close Date" sortKey="closeDate" />
               <SortableHeader label="Deal Health" sortKey="reviewShort" />
             </tr>
@@ -725,6 +768,37 @@ export default function HorsemanDrillModal({
                         }}
                       />
                     </td>
+                    {showHorsemanStackCol ? (
+                      <td style={styles.tdAmount}>
+                        <AnimatedMetricValue
+                          value={fmtMoneyCompact(
+                            toNumber(barAmountKey ? r?.[barAmountKey] : null) || 0
+                          )}
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 950,
+                            color: "#0b3251",
+                            lineHeight: 1.2,
+                          }}
+                        />
+                      </td>
+                    ) : null}
+                    {showHorsemanBasisCol ? (
+                      <td
+                        style={{
+                          ...styles.td,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          maxWidth: 240,
+                          color: "rgba(15,23,42,0.78)",
+                        }}
+                        title={basisKey ? String(r?.[basisKey] ?? "") : ""}
+                      >
+                        {basisKey && r?.[basisKey] != null && String(r[basisKey]).trim() !== ""
+                          ? String(r[basisKey])
+                          : "—"}
+                      </td>
+                    ) : null}
                     <td style={styles.td}>{fmtDate(r?.[closeKey])}</td>
                     <td style={styles.tdWide}>
                       <DealReviewPopover
@@ -746,13 +820,13 @@ export default function HorsemanDrillModal({
               <tr>
                 <td
                   colSpan={
-                    showStageColumn
+                    (showStageColumn
                       ? showOwnerColumn
                         ? 6
                         : 5
                       : showOwnerColumn
                         ? 5
-                        : 4
+                        : 4) + extraHorsemanCols
                   }
                   style={styles.emptyState}
                 >

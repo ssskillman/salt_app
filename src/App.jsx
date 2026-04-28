@@ -5,8 +5,13 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { useSigmaData } from "./hooks/useSigmaData";
 
 // Formatter Utils
-import { fmtMoneyCompact, fmtPct1, fmtX, toNumber } from "./utils/formatters.jsx";
-import { resolveColumnKey, aePerformanceRowSaltTrueZeroAcv } from "./utils/data.jsx";
+import { fmtMoneyCompact, fmtPct1, fmtInt, fmtX, toNumber } from "./utils/formatters.jsx";
+import {
+  resolveColumnKey,
+  aePerformanceRowSaltTrueZeroAcv,
+  normalizeOutcome,
+} from "./utils/data.jsx";
+import { mergeHorsemanDetailPayloadRows } from "./utils/horsemanDetailPayload.js";
 import {
   aeStage4CovMetricTitle,
   formatAeStage4CovMult,
@@ -181,12 +186,15 @@ function priorFiscalYearSameQuarterKey(canonicalKey) {
   return `${Number(m[1]) - 1}-Q${m[2]}`;
 }
 
+function rowKeySlugApp(s) {
+  return norm(String(s ?? "")).replace(/[\s_-]+/g, "");
+}
+
 function findRowKeyByCandidates(rowsArr, candidates = []) {
   if (!Array.isArray(rowsArr) || rowsArr.length === 0 || !Array.isArray(candidates) || candidates.length === 0) {
     return null;
   }
 
-  
   const row0 = rowsArr[0] || {};
   const rowKeys = Object.keys(row0);
 
@@ -200,7 +208,56 @@ function findRowKeyByCandidates(rowsArr, candidates = []) {
     if (suffix) return suffix;
   }
 
+  for (const candidate of candidates) {
+    const t = rowKeySlugApp(candidate);
+    if (!t) continue;
+    const relaxed =
+      rowKeys.find((k) => rowKeySlugApp(k) === t) || rowKeys.find((k) => rowKeySlugApp(k).endsWith(t));
+    if (relaxed) return relaxed;
+  }
+
   return null;
+}
+
+/**
+ * Dollar amount + human label for how the Horseman stacked bar uses each spine row.
+ * Matches `horsemanSpineRowValueDollars` / bar aggregation.
+ */
+function horsemanSpineRowValueMeta(row, { outcomeKey, closedAcvKey, closedLostAcvKey, openPipeAcvKey }) {
+  if (!outcomeKey) {
+    return { value: 0, basisLabel: "—" };
+  }
+  const raw = String(row?.[outcomeKey] ?? "").trim();
+  if (!raw) return { value: 0, basisLabel: "—" };
+  const norm = normalizeOutcome(raw);
+  if (norm === "won") {
+    const v = toNumber(closedAcvKey ? row?.[closedAcvKey] : null) || 0;
+    return {
+      value: v,
+      basisLabel: closedAcvKey ? "Closed won ACV (ESO · mapped)" : "Closed won ACV (map ESO · Closed Won ACV)",
+    };
+  }
+  if (norm === "lost") {
+    if (closedLostAcvKey) {
+      const lostAcv = toNumber(row?.[closedLostAcvKey]);
+      if (lostAcv != null) {
+        return { value: lostAcv, basisLabel: "Closed lost ACV (ESO · mapped)" };
+      }
+    }
+    const v = toNumber(openPipeAcvKey ? row?.[openPipeAcvKey] : null) || 0;
+    return {
+      value: v,
+      basisLabel: closedLostAcvKey
+        ? "Open pipeline ACV (fallback — closed-lost ACV blank on row)"
+        : "Open pipeline ACV (fallback — map ESO · Closed Lost ACV)",
+    };
+  }
+  const v = toNumber(openPipeAcvKey ? row?.[openPipeAcvKey] : null) || 0;
+  return { value: v, basisLabel: "Open pipeline ACV (open bucket)" };
+}
+
+function horsemanSpineRowValueDollars(row, keys) {
+  return horsemanSpineRowValueMeta(row, keys).value;
 }
 
 /**
@@ -500,6 +557,44 @@ function filterRowsByBusinessLine(rowsArr, businessLine, key) {
   });
 }
 
+/** CEO toggle vs Sigma BL labels on YoY opp-level rows (uses matchesPgBusinessLine). */
+function filterYoyRowsByBusinessLine(rowsArr, businessLine, key, rowJsonKey) {
+  if (!Array.isArray(rowsArr)) return [];
+  const blSel = String(businessLine ?? "").trim();
+  if (!blSel || blSel.toLowerCase() === "all") return rowsArr;
+  return rowsArr.filter((row) => {
+    let raw = key && row?.[key] != null && String(row[key]).trim() !== "" ? row[key] : null;
+    if (raw == null && rowJsonKey) {
+      const j = parseSigmaJsonLoose(row?.[rowJsonKey]);
+      raw = j && typeof j === "object" ? j.business_line : null;
+    }
+    if (raw == null && !key && !rowJsonKey) return true;
+    return matchesPgBusinessLine(businessLine, raw);
+  });
+}
+
+function parseSigmaJsonLoose(raw) {
+  if (raw == null) return null;
+  try {
+    let cur = raw;
+    if (typeof cur === "object") {
+      return Array.isArray(cur) ? cur[0] : cur;
+    }
+    while (typeof cur === "string") {
+      const s = cur.trim();
+      if (!s) return null;
+      cur = JSON.parse(s);
+    }
+    if (cur && typeof cur === "object") {
+      return Array.isArray(cur) ? cur[0] : cur;
+    }
+    return null;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 function normalizeBusinessLineLabel(value) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -509,9 +604,19 @@ function normalizeBusinessLineForMatch(value) {
   return normalizeBusinessLineLabel(value).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/** Map CEO-view synonyms to canonical segment names (toggle label vs stored state). */
+function normalizeCeoViewBusinessLineSelection(selected) {
+  const s = String(selected ?? "").trim();
+  if (!s) return selected;
+  const sl = s.toLowerCase();
+  if (sl === "new biz" || sl === "nb" || sl === "net new" || sl === "netnew") return "New Business";
+  if (sl === "expansion" || sl === "gross exp" || sl === "exp") return "Gross Expansion";
+  return selected;
+}
+
 /** Aligns Sigma row labels with CEO toggle: All | New Business | Gross Expansion */
 function matchesPgBusinessLine(selected, rowValue) {
-  const selectedNorm = normalizeBusinessLineLabel(selected);
+  const selectedNorm = normalizeBusinessLineLabel(normalizeCeoViewBusinessLineSelection(selected));
   const rowNorm = normalizeBusinessLineForMatch(rowValue);
 
   if (!rowNorm) return false;
@@ -1084,11 +1189,13 @@ export default function App() {
   const [showArchitecture, setShowArchitecture] = useState(false);
 
   const [cpoSelectedAccount, setCpoSelectedAccount] = useState(null);
+  const [businessLine, setBusinessLine] = useState("All");
 
   const { data, rows, columns, isLoading, config, debugInfo } = useSigmaData({
     cpoAccountId: cpoSelectedAccount?.account_id ?? null,
     cpoIterableOrgId: cpoSelectedAccount?.iterable_org_id ?? null,
     cpoAccountName: cpoSelectedAccount?.account_name ?? null,
+    ceoBusinessLine: businessLine,
   });
 
   const co = data?.co ?? {};
@@ -1152,7 +1259,6 @@ export default function App() {
   const [saltRescueAutoOpened, setSaltRescueAutoOpened] = useState(false);
 
   const [fieldScopePath, setFieldScopePath] = useState(null);
-  const [businessLine, setBusinessLine] = useState("All");
 
   const [employeeFiltersOpen, setEmployeeFiltersOpen] = useState(false);
 
@@ -2206,13 +2312,21 @@ const croSelectedRollupNode = useMemo(() => {
       .map((r) => toNumber(scopedCreateCloseKeys.openPipeYoyPct ? r?.[scopedCreateCloseKeys.openPipeYoyPct] : null))
       .filter((v) => v != null);
 
+    /*
+     * Only override YoY % from create-close *detail* rows when the editor explicitly maps those
+     * columns. Otherwise findRowKeyByCandidates can match an unrelated column name and yield an
+     * empty series — which incorrectly hid rolled YoY from the opp-level JSON element.
+     */
+    const wonYoyFromDetailEnabled = !!resolveColumnKey(config?.ccd_closed_won_yoy_pct);
+    const openYoyFromDetailEnabled = !!resolveColumnKey(config?.ccd_open_pipe_yoy_pct);
+
     return {
       wonQTD: wonVals.length ? wonVals.reduce((a, b) => a + b, 0) : co.cc_won_qtd,
       openPipeQTD: openVals.length ? openVals.reduce((a, b) => a + b, 0) : co.cc_open_pipe_qtd,
-      wonQTDYoy: wonYoyVals.length ? wonYoyVals[0] : co.cc_won_qtd_yoy,
-      openPipeQTDYoy: openYoyVals.length ? openYoyVals[0] : co.cc_open_pipe_qtd_yoy,
+      wonQTDYoy: wonYoyFromDetailEnabled && wonYoyVals.length ? wonYoyVals[0] : co.cc_won_qtd_yoy,
+      openPipeQTDYoy: openYoyFromDetailEnabled && openYoyVals.length ? openYoyVals[0] : co.cc_open_pipe_qtd_yoy,
     };
-  }, [scopedCreateCloseRows, scopedCreateCloseKeys, co]);
+  }, [scopedCreateCloseRows, scopedCreateCloseKeys, co, config?.ccd_closed_won_yoy_pct, config?.ccd_open_pipe_yoy_pct]);
 
 
 
@@ -3151,12 +3265,103 @@ const createCloseMetrics = useMemo(() => {
   };
 }, [scopedCreateCloseSpineRows, scopedCreateCloseSpineKeys, scopedCreateCloseSummary]);
 
+  const scopedCreateCloseYoyDrillRows = useMemo(() => {
+    const yoyRows = rows?.createCloseYoyCard;
+    if (!Array.isArray(yoyRows) || yoyRows.length === 0) return [];
+
+    const metric = String(createCloseDrillMetric ?? "").trim().toLowerCase();
+    const isWonYoy = metric === "won qtd yoy";
+    const isOpenYoy = metric === "open pipeline qtd yoy" || metric === "open pipelinr qtd yoy";
+    if (!isWonYoy && !isOpenYoy) return [];
+
+    const rowJsonKey =
+      resolveColumnKey(config?.ccy_yoy_row_json) ||
+      findRowKeyByCandidates(yoyRows, [
+        "ccy_yoy_row_json",
+        "CCY_YOY_ROW_JSON",
+        "Ccy Yoy Row Json",
+        "CCY YOY ROW JSON",
+      ]);
+
+    const blKey =
+      resolveColumnKey(config?.ccy_yoy_business_line) || findRowKeyByCandidates(yoyRows, ["business_line", "BUSINESS_LINE"]);
+
+    const ownerKey = findRowKeyByCandidates(yoyRows, ["opp_owner_name", "Opp Owner Name", "owner_name"]);
+    const acctKey = findRowKeyByCandidates(yoyRows, ["account_name", "acct_name", "Account Name"]);
+    const stageKey = findRowKeyByCandidates(yoyRows, ["stage_name", "Stage Name"]);
+    const closeKey = findRowKeyByCandidates(yoyRows, ["close_date", "Close Date"]);
+    const oppIdKey = findRowKeyByCandidates(yoyRows, ["opp_id", "Opp Id", "OPP_ID"]);
+    const oppNameKey = findRowKeyByCandidates(yoyRows, ["opp_name", "Opp Name"]);
+    const fyqKey = findRowKeyByCandidates(yoyRows, ["close_fiscal_yearquarter", "fiscal_yearquarter"]);
+    const cwKey = findRowKeyByCandidates(yoyRows, ["ccy_curr_won_acv", "CCY_CURR_WON_ACV"]);
+    const pwKey =
+      findRowKeyByCandidates(yoyRows, ["pty_qtd_closed_won_acv", "PTY_QTD_CLOSED_WON_ACV"]) ||
+      findRowKeyByCandidates(yoyRows, ["ccy_prior_won_acv", "CCY_PRIOR_WON_ACV"]);
+    const coKey = findRowKeyByCandidates(yoyRows, ["ccy_curr_open_acv", "CCY_CURR_OPEN_ACV"]);
+    const poKey = findRowKeyByCandidates(yoyRows, ["ccy_prior_open_acv", "CCY_PRIOR_OPEN_ACV"]);
+
+    const scopedYoy = filterYoyRowsByBusinessLine(yoyRows, businessLine, blKey, rowJsonKey);
+
+    const out = [];
+
+    for (const r of scopedYoy) {
+      const j = rowJsonKey ? parseSigmaJsonLoose(r[rowJsonKey]) : null;
+      const pick = (rk, jk) => {
+        if (rk && r[rk] != null && String(r[rk]).trim() !== "") return r[rk];
+        if (j && jk in j && j[jk] != null && String(j[jk]).trim() !== "") return j[jk];
+        return null;
+      };
+
+      const currW = toNumber(cwKey ? r[cwKey] : null) ?? toNumber(j?.ccy_curr_won_acv) ?? 0;
+      const priorW =
+        toNumber(pwKey ? r[pwKey] : null) ??
+        toNumber(j?.pty_qtd_closed_won_acv) ??
+        toNumber(j?.ccy_prior_won_acv) ??
+        0;
+      const currO = toNumber(coKey ? r[coKey] : null) ?? toNumber(j?.ccy_curr_open_acv) ?? 0;
+      const priorO = toNumber(poKey ? r[poKey] : null) ?? toNumber(j?.ccy_prior_open_acv) ?? 0;
+
+      if (isWonYoy && currW === 0 && priorW === 0) continue;
+      if (isOpenYoy && currO === 0 && priorO === 0) continue;
+
+      const wonYoyPct = cwKey && priorW > 0 ? (currW - priorW) / priorW : null;
+      const openYoyPct = priorO > 0 ? (currO - priorO) / priorO : currO > 0 ? null : null;
+
+      out.push({
+        opp_owner_name: pick(ownerKey, "opp_owner_name"),
+        account_name: pick(acctKey, "account_name"),
+        stage_name: pick(stageKey, "stage_name"),
+        close_date: pick(closeKey, "close_date"),
+        opp_id: pick(oppIdKey, "opp_id"),
+        opp_name: pick(oppNameKey, "opp_name"),
+        business_line: pick(blKey, "business_line"),
+        fiscal_yearquarter: pick(fyqKey, "close_fiscal_yearquarter"),
+        cc_qtd_closed_won: currW,
+        cc_qtd_open_pipe: currO,
+        ccy_curr_won_acv: currW,
+        ccy_prior_won_acv: priorW,
+        pty_qtd_closed_won_acv: priorW,
+        ccy_curr_open_acv: currO,
+        ccy_prior_open_acv: priorO,
+        cc_qtd_closed_won_yoy_pct: isWonYoy ? currW : null,
+        cc_qtd_open_pipe_yoy_pct: isOpenYoy ? currO : null,
+        cc_yoy_won_yoy_pct: isWonYoy ? wonYoyPct : null,
+        cc_yoy_open_yoy_pct: isOpenYoy ? openYoyPct : null,
+      });
+    }
+
+    return out;
+  }, [rows?.createCloseYoyCard, config, businessLine, createCloseDrillMetric]);
+
   const scopedCreateCloseDrillRows = useMemo(() => {
+    const metric = String(createCloseDrillMetric ?? "").trim().toLowerCase();
+    if (metric === "won qtd yoy" || metric === "open pipeline qtd yoy" || metric === "open pipelinr qtd yoy") {
+      return scopedCreateCloseYoyDrillRows;
+    }
+
     if (!Array.isArray(scopedCreateCloseSpineRows) || scopedCreateCloseSpineRows.length === 0) {
       return [];
     }
-
-    const metric = String(createCloseDrillMetric ?? "").trim().toLowerCase();
 
     const baseRows =
       metric === "open pipe qtd"
@@ -3212,7 +3417,12 @@ const createCloseMetrics = useMemo(() => {
           : null
       ) || 0,
     }));
-  }, [scopedCreateCloseSpineRows, scopedCreateCloseSpineKeys, createCloseDrillMetric]);
+  }, [
+    scopedCreateCloseSpineRows,
+    scopedCreateCloseSpineKeys,
+    createCloseDrillMetric,
+    scopedCreateCloseYoyDrillRows,
+  ]);
 
   const scopedLargeDealsSpineKeys = useMemo(() => {
     return {
@@ -4042,6 +4252,13 @@ const scopedHorsemanEsoKeys = useMemo(() => {
         "Open Pipeline Acv",
       ]),
 
+    closedLostAcv:
+      resolveColumnKey(config?.eso_closed_lost_acv) ||
+      findRowKeyByCandidates(rows?.employeeScopeOpportunitySpine || [], [
+        "closed_lost_acv",
+        "Closed Lost Acv",
+      ]),
+
     businessLine:
       resolveColumnKey(config?.eso_bl) ||
       findRowKeyByCandidates(rows?.employeeScopeOpportunitySpine || [], [
@@ -4077,29 +4294,43 @@ const scopedHorsemanEsoKeys = useMemo(() => {
     businessLine,
   ]);
 
+  /** When true, Horseman bars are built from the scoped opportunity spine; otherwise from `rows.horseman` (Sigma). */
+  const horsemanChartUsesEsoSpine = useMemo(() => {
+    const {
+      source,
+      outcome,
+      closedAcv,
+      openPipeAcv,
+      hmSourceOut,
+      hmOutcomeOut,
+      hmValueOut,
+    } = scopedHorsemanEsoKeys;
+    return (
+      !!source &&
+      !!outcome &&
+      !!closedAcv &&
+      !!openPipeAcv &&
+      !!hmSourceOut &&
+      !!hmOutcomeOut &&
+      !!hmValueOut &&
+      Array.isArray(scopedHorsemanEsoRows) &&
+      scopedHorsemanEsoRows.length > 0
+    );
+  }, [scopedHorsemanEsoKeys, scopedHorsemanEsoRows]);
+
 const horsemanRowsFromEso = useMemo(() => {
   const {
     source,
     outcome,
     closedAcv,
+    closedLostAcv,
     openPipeAcv,
     hmSourceOut,
     hmOutcomeOut,
     hmValueOut,
   } = scopedHorsemanEsoKeys;
 
-  const canBuild =
-    !!source &&
-    !!outcome &&
-    !!closedAcv &&
-    !!openPipeAcv &&
-    !!hmSourceOut &&
-    !!hmOutcomeOut &&
-    !!hmValueOut &&
-    Array.isArray(scopedHorsemanEsoRows) &&
-    scopedHorsemanEsoRows.length > 0;
-
-  if (!canBuild) {
+  if (!horsemanChartUsesEsoSpine) {
     return rows?.horseman || [];
   }
 
@@ -4111,13 +4342,12 @@ const horsemanRowsFromEso = useMemo(() => {
 
     if (!src || !out) continue;
 
-    const outNorm = out.toLowerCase();
-    const value =
-      outNorm === "won"
-        ? toNumber(r?.[closedAcv]) || 0
-        : outNorm === "lost"
-          ? 0
-          : toNumber(r?.[openPipeAcv]) || 0;
+    const value = horsemanSpineRowValueDollars(r, {
+      outcomeKey: outcome,
+      closedAcvKey: closedAcv,
+      closedLostAcvKey: closedLostAcv,
+      openPipeAcvKey: openPipeAcv,
+    });
 
     const bucketKey = `${src}__${out}`;
 
@@ -4134,13 +4364,14 @@ const horsemanRowsFromEso = useMemo(() => {
   }
 
   return Array.from(buckets.values());
-}, [scopedHorsemanEsoKeys, scopedHorsemanEsoRows, rows?.horseman]);
+}, [horsemanChartUsesEsoSpine, scopedHorsemanEsoKeys, scopedHorsemanEsoRows, rows?.horseman]);
 
 const horsemanRowsFromEsoByCreatedBy = useMemo(() => {
   const {
     createdBy,
     outcome,
     closedAcv,
+    closedLostAcv,
     openPipeAcv,
     hmSourceOut,
     hmOutcomeOut,
@@ -4170,13 +4401,12 @@ const horsemanRowsFromEsoByCreatedBy = useMemo(() => {
 
     if (!src || !out) continue;
 
-    const outNorm = out.toLowerCase();
-    const value =
-      outNorm === "won"
-        ? toNumber(r?.[closedAcv]) || 0
-        : outNorm === "lost"
-          ? 0
-          : toNumber(r?.[openPipeAcv]) || 0;
+    const value = horsemanSpineRowValueDollars(r, {
+      outcomeKey: outcome,
+      closedAcvKey: closedAcv,
+      closedLostAcvKey: closedLostAcv,
+      openPipeAcvKey: openPipeAcv,
+    });
 
     const bucketKey = `${src}__${out}`;
 
@@ -4201,24 +4431,13 @@ const horsemanDetailRowsFromEso = useMemo(() => {
   }
 
   return scopedHorsemanEsoRows.map((r) => {
-    const outcomeRaw = scopedHorsemanEsoKeys.outcome
-      ? String(r?.[scopedHorsemanEsoKeys.outcome] ?? "").trim().toLowerCase()
-      : "";
-
-    const arrValue =
-      outcomeRaw === "won"
-        ? toNumber(
-            scopedHorsemanEsoKeys.closedAcv
-              ? r?.[scopedHorsemanEsoKeys.closedAcv]
-              : null
-          ) || 0
-        : outcomeRaw === "lost"
-          ? 0
-          : toNumber(
-              scopedHorsemanEsoKeys.openPipeAcv
-                ? r?.[scopedHorsemanEsoKeys.openPipeAcv]
-                : null
-            ) || 0;
+    const spineKeys = {
+      outcomeKey: scopedHorsemanEsoKeys.outcome,
+      closedAcvKey: scopedHorsemanEsoKeys.closedAcv,
+      closedLostAcvKey: scopedHorsemanEsoKeys.closedLostAcv,
+      openPipeAcvKey: scopedHorsemanEsoKeys.openPipeAcv,
+    };
+    const { value: arrValue, basisLabel } = horsemanSpineRowValueMeta(r, spineKeys);
 
     return {
       eso_opp_id: resolveColumnKey(config?.eso_opp_id)
@@ -4242,6 +4461,8 @@ const horsemanDetailRowsFromEso = useMemo(() => {
         : null,
 
       eso_arr: arrValue,
+      eso_horseman_stack: arrValue,
+      eso_horseman_basis: basisLabel,
 
       eso_source: scopedHorsemanEsoKeys.source
         ? r?.[scopedHorsemanEsoKeys.source]
@@ -4265,6 +4486,18 @@ const horsemanDetailRowsFromEso = useMemo(() => {
     };
   });
 }, [scopedHorsemanEsoRows, scopedHorsemanEsoKeys, config]);
+
+/** Drill rows must follow the same grain as the bars (spine vs Sigma horseman detail + JSON). */
+const horsemanDetailRowsForDrill = useMemo(() => {
+  if (horsemanChartUsesEsoSpine) return horsemanDetailRowsFromEso;
+  const payloadKey = resolveColumnKey(config?.hmd_row_payload);
+  return mergeHorsemanDetailPayloadRows(rows?.horsemanDetail ?? [], payloadKey);
+}, [
+  horsemanChartUsesEsoSpine,
+  horsemanDetailRowsFromEso,
+  rows?.horsemanDetail,
+  config?.hmd_row_payload,
+]);
 
   useEffect(() => {
     if (!debugLoggingEnabled) return;
@@ -5384,18 +5617,18 @@ const productMixDrillRows = useMemo(() => {
                     title="Click to view Create & Close raw drillthrough rows"
                   />
                   <MetricCard
-                    label="Won QTD YoY"
-                    value={fmtPct1(scopedCreateCloseSummary.wonQTDYoy)}
+                    label="PY QTD Wins"
+                    value={fmtMoneyCompact(toNumber(co?.cc_yoy_payload?.prior_closed_won_qtd_amt))}
+                    subValue={co?.cc_won_pty_qtd_opp_count != null ? fmtInt(co.cc_won_pty_qtd_opp_count) : null}
+                    subLabel={co?.cc_won_pty_qtd_opp_count != null ? "opps" : null}
                     onClick={() => openCreateCloseDrill("Won QTD YoY")}
-                    title="Click to view Create & Close raw drillthrough rows"
-                    isWip
+                    title="Prior-year same quarter as prompt: closed-won ACV (main) and opportunity count (opps). Click for drillthrough."
                   />
                   <MetricCard
                     label="Open Pipeline QTD YoY"
                     value={fmtPct1(scopedCreateCloseSummary.openPipeQTDYoy)}
                     onClick={() => openCreateCloseDrill("Open Pipeline QTD YoY")}
                     title="Click to view Create & Close raw drillthrough rows"
-                    isWip
                   />
                 </div>
               </Surface>
@@ -5493,7 +5726,7 @@ const productMixDrillRows = useMemo(() => {
                     config={config}
                     horsemanRows={horsemanRowsFromEso}
                     horsemanRowsByCreatedBy={horsemanRowsFromEsoByCreatedBy}
-                    horsemanDetailRows={horsemanDetailRowsFromEso}
+                    horsemanDetailRows={horsemanDetailRowsForDrill}
                     onInfo={() => openDefs("horseman")}
                     onOpenDefinitions={openDefs}
                     onFeedbackAnchorCapture={rememberFeedbackAnchor}
@@ -5875,7 +6108,11 @@ const productMixDrillRows = useMemo(() => {
       <CreateCloseDrillModal
         open={createCloseDrillOpen}
         onClose={() => setCreateCloseDrillOpen(false)}
-        title={`Create & Close — ${createCloseDrillMetric}`}
+        title={
+          String(createCloseDrillMetric ?? "").trim().toLowerCase() === "won qtd yoy"
+            ? "Create & Close — Prior FY C&C (closed won)"
+            : `Create & Close — ${createCloseDrillMetric}`
+        }
         rows={scopedCreateCloseDrillRows}
         columns={[]}
         config={config}
@@ -5884,6 +6121,7 @@ const productMixDrillRows = useMemo(() => {
         fieldScopeLabel={fieldScopeLabel}
         businessLine={businessLine}
         onOpenDefinitions={openDefs}
+        yoyPayloadSummary={co.cc_yoy_payload ?? null}
       />
 
       <ProductMixDrillModal

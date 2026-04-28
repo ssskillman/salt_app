@@ -7,6 +7,10 @@ import PillMultiSelect from "./PillMultiSelect";
 import HorsemanDrillModal from "./HorsemanDrillModal";
 import { normalizeOutcome, resolveColumnKey } from "../../utils/data";
 import { toNumber } from "../../utils/formatters";
+import {
+  HMD_FLAT,
+  mergeHorsemanDetailPayloadRows,
+} from "../../utils/horsemanDetailPayload";
 
 /** Default Recharts bar thickness (Created-by scroll height is derived from this). */
 const HORSEMAN_BAR_SIZE = 26;
@@ -183,36 +187,62 @@ export default function HorsemanSection({
     }
   }, [createdBySupported, bucketMode]);
 
+  const hmdPayloadCol = resolveColumnKey(config?.hmd_row_payload);
+  const useHmdPayload = !!hmdPayloadCol;
+
   const keys = useMemo(() => {
-  return {
-    hmSource: resolveColumnKey(config?.hm_source),
-    hmCreatedBy: resolveColumnKey(config?.hm_created_by),
-    hmOutcome: resolveColumnKey(config?.hm_outcome),
-    hmValue: resolveColumnKey(config?.hm_value),
+    const hmdFromPayload = useHmdPayload
+      ? {
+          hmdSource: HMD_FLAT.source,
+          hmdCreatedBy: HMD_FLAT.createdBy,
+          hmdOutcome: HMD_FLAT.outcome,
+          hmdStage: HMD_FLAT.stage,
+          hmdOppName: HMD_FLAT.oppName,
+          hmdOwner: HMD_FLAT.owner,
+          hmdArr: HMD_FLAT.arr,
+          hmdClose: HMD_FLAT.close,
+          hmdDealReview: HMD_FLAT.dealReview,
+          hmdDealReviewShort: HMD_FLAT.dealReviewShort,
+          hmdOppId: HMD_FLAT.oppId,
+        }
+      : {
+          hmdSource: resolveColumnKey(config?.hmd_source),
+          hmdCreatedBy: resolveColumnKey(config?.hmd_created_by),
+          hmdOutcome: resolveColumnKey(config?.hmd_outcome),
+          hmdStage: resolveColumnKey(config?.hmd_stage),
+          hmdOppName: resolveColumnKey(config?.hmd_opp_name),
+          hmdOwner: resolveColumnKey(config?.hmd_owner),
+          hmdArr: resolveColumnKey(config?.hmd_arr),
+          hmdClose: resolveColumnKey(config?.hmd_close),
+          hmdDealReview: resolveColumnKey(config?.hmd_deal_review),
+          hmdDealReviewShort: resolveColumnKey(config?.hmd_deal_review_short),
+          hmdOppId: resolveColumnKey(config?.hmd_opp_id),
+        };
 
-    hmdSource: resolveColumnKey(config?.hmd_source),
-    hmdCreatedBy: resolveColumnKey(config?.hmd_created_by),
-    hmdOutcome: resolveColumnKey(config?.hmd_outcome),
-    hmdStage: resolveColumnKey(config?.hmd_stage),
-    hmdOppName: resolveColumnKey(config?.hmd_opp_name),
-    hmdOwner: resolveColumnKey(config?.hmd_owner),
-    hmdArr: resolveColumnKey(config?.hmd_arr),
-    hmdClose: resolveColumnKey(config?.hmd_close),
-    hmdDealReview: resolveColumnKey(config?.hmd_deal_review),
-    hmdDealReviewShort: resolveColumnKey(config?.hmd_deal_review_short),
-    hmdOppId: resolveColumnKey(config?.hmd_opp_id),
+    return {
+      hmSource: resolveColumnKey(config?.hm_source),
+      hmCreatedBy: resolveColumnKey(config?.hm_created_by),
+      hmOutcome: resolveColumnKey(config?.hm_outcome),
+      hmValue: resolveColumnKey(config?.hm_value),
 
-    // ESO fallback support
-    esoOppId: "eso_opp_id",
-    esoOppName: "eso_opp",
-    esoOwner: "eso_opp_owner_name",
-    esoStage: "eso_stage",
-    esoArr: "eso_arr",
-    esoClose: "eso_close",
-    esoDealReview: "eso_deal_review",
-    esoDealReviewShort: "eso_deal_review_short",
-  };
-}, [config]);
+      ...hmdFromPayload,
+
+      // ESO fallback support
+      esoOppId: "eso_opp_id",
+      esoOppName: "eso_opp",
+      esoOwner: "eso_opp_owner_name",
+      esoStage: "eso_stage",
+      esoArr: "eso_arr",
+      esoClose: "eso_close",
+      esoDealReview: "eso_deal_review",
+      esoDealReviewShort: "eso_deal_review_short",
+    };
+  }, [config, useHmdPayload]);
+
+  const horsemanDetailRowsMerged = useMemo(
+    () => mergeHorsemanDetailPayloadRows(horsemanDetailRows, hmdPayloadCol),
+    [horsemanDetailRows, hmdPayloadCol]
+  );
 
   const chartInputRows = useMemo(() => {
     if (
@@ -287,27 +317,30 @@ const filteredDrillRows = useMemo(() => {
 
   if (!source || !outcome) return [];
 
-  return horsemanDetailRows.filter((r) => {
+  return horsemanDetailRowsMerged.filter((r) => {
     const rowBucket = normText(
       bucketMode === "created_by"
-        ? (r?.eso_created_by ?? (hmdCreatedBy ? r?.[hmdCreatedBy] : ""))
-        : (r?.eso_source ?? (hmdSource ? r?.[hmdSource] : ""))
+        ? (r?.eso_created_by ??
+            r?.[HMD_FLAT.createdBy] ??
+            (hmdCreatedBy ? r?.[hmdCreatedBy] : ""))
+        : (r?.eso_source ?? r?.[HMD_FLAT.source] ?? (hmdSource ? r?.[hmdSource] : ""))
     );
 
     const clickedSource = normText(source);
 
     if (rowBucket !== clickedSource) return false;
 
-    // ✅ Prefer ESO outcome
+    // Prefer spine outcome, then merged JSON (`hmd__*`), then legacy mapped columns / stage.
     const rowOutcome = normalizeOutcome(
       r?.eso_outcome ??
+      r?.[HMD_FLAT.outcome] ??
       r?.[hmdOutcome] ??
       r?.[hmdStage]
     );
 
     return rowOutcome === outcome;
   });
-}, [drillState, horsemanDetailRows, keys, bucketMode]);
+}, [drillState, horsemanDetailRowsMerged, keys, bucketMode]);
 
   const toggleOutcome = (key) => {
     setOutcomes((prev) => {
@@ -338,7 +371,7 @@ const filteredDrillRows = useMemo(() => {
   };
 
 const modalFieldKeys = useMemo(() => {
-  const sample = horsemanDetailRows?.[0] || {};
+  const sample = horsemanDetailRowsMerged?.[0] || {};
 
   const hasEsoShape =
     "eso_opp_id" in sample ||
@@ -354,23 +387,32 @@ const modalFieldKeys = useMemo(() => {
       ownerKey: keys.esoOwner,
       stageKey: keys.esoStage,
       arrKey: keys.esoArr,
+      segmentTotalKey: null,
+      barAmountKey: null,
+      basisKey: "eso_horseman_basis",
       closeKey: keys.esoClose,
       dealReviewKey: keys.esoDealReview,
       dealReviewShortKey: keys.esoDealReviewShort,
     };
   }
 
+  const jsonExplain = !!resolveColumnKey(config?.hmd_row_payload);
+
   return {
     oppIdKey: keys.hmdOppId,
     oppNameKey: keys.hmdOppName,
     ownerKey: keys.hmdOwner,
     stageKey: keys.hmdStage,
-    arrKey: keys.hmdArr,
+    /** JSON payload: ACV column shows acv_change when present, not base arr (`arr`). */
+    arrKey: jsonExplain ? HMD_FLAT.drillModalAcv : keys.hmdArr,
+    segmentTotalKey: null,
+    barAmountKey: null,
+    basisKey: jsonExplain ? HMD_FLAT.horsemanBasis : null,
     closeKey: keys.hmdClose,
     dealReviewKey: keys.hmdDealReview,
     dealReviewShortKey: keys.hmdDealReviewShort,
   };
-}, [horsemanDetailRows, keys]);
+}, [horsemanDetailRowsMerged, keys, config?.hmd_row_payload]);
 
 
   const inner = (
@@ -593,6 +635,9 @@ const modalFieldKeys = useMemo(() => {
         ownerKey={modalFieldKeys.ownerKey}
         stageKey={modalFieldKeys.stageKey}
         arrKey={modalFieldKeys.arrKey}
+        segmentTotalKey={modalFieldKeys.segmentTotalKey}
+        barAmountKey={modalFieldKeys.barAmountKey}
+        basisKey={modalFieldKeys.basisKey}
         closeKey={modalFieldKeys.closeKey}
         dealReviewKey={modalFieldKeys.dealReviewKey}
         dealReviewShortKey={modalFieldKeys.dealReviewShortKey}

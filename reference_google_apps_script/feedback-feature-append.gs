@@ -1,20 +1,29 @@
 /**
  * Google Apps Script — append Feature Request rows to the "Feedback" sheet.
  *
- * 1. Open the spreadsheet: https://docs.google.com/spreadsheets/d/1rjIyKAnGpUOuQW-ueOrE6wIPvd7nsj180KWuvH1fk7c/edit
- * 2. Extensions → Apps Script → paste this file → Save.
- * 3. Deploy → New deployment → Type: Web app
- *    - Execute as: Me
- *    - Who has access: Anyone (or Anyone with Google account)
- * 4. Copy the Web App URL into salt_app/.env.local as GOOGLE_SHEETS_WEBAPP_URL=
- * 5. Restart `npm run dev`.
+ * 1. Set SPREADSHEET_ID to the ID from your sheet’s URL (…/d/THIS_PART/edit).
+ * 2. Extensions → Apps Script → paste → Save → Deploy → Web app (Execute as: Me, Who has access: Anyone).
+ * 3. Copy the /exec URL into GOOGLE_SHEETS_WEBAPP_URL (Netlify + .env.local).
  *
- * Expected POST JSON from the SALT dev proxy:
+ * Layout (must match your tab): row HEADER_ROW = column headers; data starts HEADER_ROW+1.
+ * Writes columns B–L: #, Date, Full Name, Tab, Description, Request Urgency, Dashboard Rating, (spacer), Status, BI Response, Additional.
+ *
+ * Expected POST JSON:
  * { "featureRequestSheet": { "dateDisplay", "fullName", "userEmail", "tabWidget", "summary", "priorityStars", "details" } }
  */
 
+/** From the spreadsheet URL: https://docs.google.com/spreadsheets/d/<THIS>/edit */
 var SPREADSHEET_ID = "1rjIyKAnGpUOuQW-ueOrE6wIPvd7nsj180KWuvH1fk7c";
+
 var SHEET_NAME = "Feedback";
+
+/** Row that contains #, Date, Full Name, … (the table header row). */
+var HEADER_ROW = 4;
+
+/** Must match “Request Urgency” data validation options on the sheet (edit if your list differs). */
+var URGENCY_FOR_1_STAR = "Nice to have";
+var URGENCY_FOR_2_STARS = "Should have";
+var URGENCY_FOR_5_STARS = "Must have";
 
 function doPost(e) {
   try {
@@ -34,9 +43,12 @@ function doPost(e) {
     if (n !== 1 && n !== 2 && n !== 5) {
       n = 1;
     }
-    var stars = new Array(n + 1).join("\u2605");
+    var urgencyLabel = n === 5 ? URGENCY_FOR_5_STARS : n === 2 ? URGENCY_FOR_2_STARS : URGENCY_FOR_1_STAR;
 
-    var nextRow = sheet.getLastRow() + 1;
+    var dataStart = HEADER_ROW + 1;
+    var lastRow = sheet.getLastRow();
+    var nextRow = Math.max(lastRow + 1, dataStart);
+    var serial = nextSerialInColumnB(sheet, dataStart, lastRow);
 
     var colLParts = [];
     if (f.userEmail) {
@@ -47,15 +59,14 @@ function doPost(e) {
     }
     var colL = colLParts.join("\n\n");
 
-    // Columns A–L: # empty, Date, Full Name, Tab (Widget), Description, Request Urgency, Rating, H, I, Status, BI Response, Additional
+    // Columns B–L (11 cells): #, Date, Full Name, Tab, Description, Request Urgency, Dashboard Rating, spacer, Status, BI Response, Additional
     var row = [
-      "",
+      serial,
       f.dateDisplay || "",
       f.fullName || "",
       f.tabWidget || "",
       f.summary || "",
-      stars,
-      "",
+      urgencyLabel,
       "",
       "",
       "Backlog",
@@ -63,11 +74,28 @@ function doPost(e) {
       colL,
     ];
 
-    sheet.getRange(nextRow, 1, nextRow, row.length).setValues([row]);
-    return jsonOut({ ok: true, row: nextRow });
+    sheet.getRange(nextRow, 2, nextRow, 12).setValues([row]);
+    return jsonOut({ ok: true, row: nextRow, colStart: 2 });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err && err.message ? err.message : err) });
   }
+}
+
+/** Next # in column B (integer), based on existing numeric values in the data block. */
+function nextSerialInColumnB(sheet, dataStartRow, lastRow) {
+  if (lastRow < dataStartRow) {
+    return 1;
+  }
+  var vals = sheet.getRange(dataStartRow, 2, lastRow, 2).getValues();
+  var max = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var v = vals[i][0];
+    var num = parseInt(v, 10);
+    if (!isNaN(num) && num > max) {
+      max = num;
+    }
+  }
+  return max + 1;
 }
 
 function jsonOut(obj) {
