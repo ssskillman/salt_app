@@ -226,8 +226,8 @@ export const DEFINITIONS = {
         def: "Open ACV for opportunities created in-quarter that remain open.\nWhy it matters: Remaining in-quarter upside that was sourced this quarter.",
       },
       {
-        term: "Won QTD YoY",
-        def: "Year-over-year change in in-quarter created-and-closed Won ACV.\nWhy it matters: Indicates whether the team is improving at same-quarter conversion vs last year (marked WIP when the underlying cut is still evolving).",
+        term: "PY QTD Wins",
+        def: "Prior-year same-quarter create-and-close closed won: total ACV (primary) and opportunity count (subtext), for the fiscal quarter that matches your prompt. Open the drill for the underlying opportunities. YoY % will return in a later release.",
       },
       {
         term: "Open Pipeline QTD YoY",

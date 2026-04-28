@@ -283,6 +283,10 @@ function normKey(x) {
   return String(x ?? "").trim().toLowerCase();
 }
 
+function rowKeySlug(s) {
+  return normKey(String(s ?? "")).replace(/[\s_-]+/g, "");
+}
+
 function findRowKeyByCandidates(rowsArr, candidates = []) {
   if (!Array.isArray(rowsArr) || rowsArr.length === 0 || !Array.isArray(candidates) || candidates.length === 0) {
     return null;
@@ -301,7 +305,204 @@ function findRowKeyByCandidates(rowsArr, candidates = []) {
     if (suffix) return suffix;
   }
 
+  /* Sigma labels often use spaces; warehouse keys use underscores — match loosely. */
+  for (const candidate of candidates) {
+    const t = rowKeySlug(candidate);
+    if (!t) continue;
+    const relaxed =
+      rowKeys.find((k) => rowKeySlug(k) === t) || rowKeys.find((k) => rowKeySlug(k).endsWith(t));
+    if (relaxed) return relaxed;
+  }
+
   return null;
+}
+
+/** Parse JSON (or object) cell from Sigma — same contract as Forecast Attainment payload cells. */
+function parseSigmaJsonCell(rawPayload) {
+  if (rawPayload == null) return null;
+
+  try {
+    let cur = rawPayload;
+    if (typeof cur === "object") {
+      return Array.isArray(cur) ? cur[0] : cur;
+    }
+    /* Sigma sometimes double-encodes: outer JSON string whose value is another JSON string. */
+    while (typeof cur === "string") {
+      const s = cur.trim();
+      if (!s) return null;
+      cur = JSON.parse(s);
+    }
+    if (cur && typeof cur === "object") {
+      return Array.isArray(cur) ? cur[0] : cur;
+    }
+    return null;
+  } catch (err) {
+    debugWarn("Failed to parse JSON cell:", { rawPayload, err: String(err) });
+    return null;
+  }
+}
+
+function firstNumberFromObject(obj, keys) {
+  if (!obj || typeof obj !== "object") return null;
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+    const v = obj[k];
+    if (v == null || String(v).trim() === "") continue;
+    const n = toNumber(v);
+    if (n != null) return n;
+  }
+  return null;
+}
+
+/** CEO toggle vs Sigma business_line labels (subset of App.jsx matchesPgBusinessLine). */
+function yoyCardRowMatchesBusinessLine(selected, rowBlRaw) {
+  let selectedNorm = String(selected ?? "").trim().toLowerCase();
+  if (selectedNorm === "new biz" || selectedNorm === "nb" || selectedNorm === "net new" || selectedNorm === "netnew") {
+    selectedNorm = "new business";
+  }
+  if (selectedNorm === "expansion" || selectedNorm === "gross exp" || selectedNorm === "exp") {
+    selectedNorm = "gross expansion";
+  }
+  const rowNorm = String(rowBlRaw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!rowNorm) return false;
+  if (!selectedNorm || selectedNorm === "all") {
+    return rowNorm === "all";
+  }
+  if (selectedNorm === "new business") {
+    if (rowNorm.includes("new business") && rowNorm.includes("expansion")) return false;
+    return (
+      rowNorm === "new business" ||
+      rowNorm === "new biz" ||
+      rowNorm === "net new" ||
+      rowNorm === "netnew" ||
+      rowNorm === "nb"
+    );
+  }
+  if (selectedNorm === "gross expansion") {
+    if (rowNorm.includes("new business") && rowNorm.includes("expansion")) return false;
+    return (
+      rowNorm === "gross expansion" ||
+      rowNorm === "expansion" ||
+      rowNorm === "gross exp" ||
+      rowNorm === "exp"
+    );
+  }
+  return rowNorm === selectedNorm;
+}
+
+function resolveCcyYoyRowJsonKey(rowsArr, colsMeta, config) {
+  return (
+    resolveRowKey(config?.ccy_yoy_row_json, rowsArr, colsMeta) ||
+    findRowKeyByCandidates(rowsArr, [
+      "ccy_yoy_row_json",
+      "CCY_YOY_ROW_JSON",
+      "Ccy Yoy Row Json",
+      "CCY YOY ROW JSON",
+    ])
+  );
+}
+
+/** Scalar BL first; else `business_line` inside per-opp JSON (Sigma often omits top-level BL). */
+function rowBusinessLineForYoyCeoFilter(r, blKey, jsonKey) {
+  if (blKey) {
+    const v = r?.[blKey];
+    if (v != null && String(v).trim() !== "") return String(v).trim();
+  }
+  if (!jsonKey) return null;
+  const j = parseSigmaJsonCell(r?.[jsonKey]);
+  const bl = j && typeof j === "object" ? j.business_line : null;
+  if (bl == null || String(bl).trim() === "") return null;
+  return String(bl).trim();
+}
+
+function pickCreateCloseYoyRow(rowsArr, colsMeta, ceoBusinessLine) {
+  if (!Array.isArray(rowsArr) || rowsArr.length === 0) return null;
+  const blKey = findResolvedKeyByCandidates(rowsArr, colsMeta, [
+    "business_line",
+    "BUSINESS_LINE",
+    "Business Line",
+    "bl",
+  ]);
+  if (!blKey) return rowsArr[0] ?? null;
+
+  const want = ceoBusinessLine ?? "All";
+  if (!want || String(want).trim().toLowerCase() === "all") {
+    const allRow = rowsArr.find((r) => normKey(r?.[blKey]) === "all");
+    if (allRow) return allRow;
+    return rowsArr[0] ?? null;
+  }
+
+  const hit = rowsArr.find((r) => yoyCardRowMatchesBusinessLine(want, r?.[blKey]));
+  if (hit) return hit;
+
+  const allRow = rowsArr.find((r) => normKey(r?.[blKey]) === "all");
+  return allRow ?? rowsArr[0] ?? null;
+}
+
+/** Map scalar + segment JSON cells into one object for metric cards + drill (CreateCloseDrillModal). */
+function buildCreateCloseYoyPayloadMergedRow(row, colsMeta, config) {
+  if (!row) return null;
+  const rowsOne = [row];
+  const merged = {};
+
+  const scalarSpecs = [
+    ["fiscal_year_quarter", ["fiscal_year_quarter", "FISCAL_YEAR_QUARTER", "selected_fyq"]],
+    ["prior_year_fiscal_year_quarter", ["prior_year_fiscal_year_quarter", "PRIOR_YEAR_FISCAL_YEAR_QUARTER"]],
+    ["as_of_date", ["as_of_date", "AS_OF_DATE"]],
+    ["day_of_quarter", ["day_of_quarter", "DAY_OF_QUARTER", "days_into_quarter_inclusive"]],
+    ["curr_qtd_start", ["curr_qtd_start", "CURR_QTD_START", "current_quarter_start"]],
+    ["curr_qtd_cap_date", ["curr_qtd_cap_date", "CURR_QTD_CAP_DATE", "current_window_end"]],
+    ["py_qtd_start", ["py_qtd_start", "PY_QTD_START", "prior_quarter_start"]],
+    ["py_qtd_cap_date", ["py_qtd_cap_date", "PY_QTD_CAP_DATE", "prior_window_end"]],
+    ["curr_closed_won_qtd_amt", ["curr_closed_won_qtd_amt", "CURR_CLOSED_WON_QTD_AMT"]],
+    ["prior_closed_won_qtd_amt", ["prior_closed_won_qtd_amt", "PRIOR_CLOSED_WON_QTD_AMT"]],
+    ["closed_won_qtd_yoy_pct", ["closed_won_qtd_yoy_pct", "CLOSED_WON_QTD_YOY_PCT"]],
+    ["curr_open_pipe_qtd_amt", ["curr_open_pipe_qtd_amt", "CURR_OPEN_PIPE_QTD_AMT"]],
+    ["prior_open_pipe_qtd_amt", ["prior_open_pipe_qtd_amt", "PRIOR_OPEN_PIPE_QTD_AMT"]],
+    ["open_pipe_qtd_yoy_pct", ["open_pipe_qtd_yoy_pct", "OPEN_PIPE_QTD_YOY_PCT"]],
+  ];
+
+  for (const [outKey, cands] of scalarSpecs) {
+    const k = findResolvedKeyByCandidates(rowsOne, colsMeta, cands);
+    if (!k) continue;
+    const v = row[k];
+    if (v == null || String(v).trim() === "") continue;
+    if (outKey === "as_of_date" || outKey === "curr_qtd_start" || outKey === "curr_qtd_cap_date" || outKey === "py_qtd_start" || outKey === "py_qtd_cap_date") {
+      merged[outKey] = v;
+    } else {
+      const n = toNumber(v);
+      if (n != null) merged[outKey] = n;
+    }
+  }
+
+  const jsonKeyResolvers = [
+    () => resolveRowKey(config?.ccy_yoy_row_json, rowsOne, colsMeta),
+    () =>
+      findRowKeyByCandidates(rowsOne, [
+        "ccy_yoy_row_json",
+        "CCY_YOY_ROW_JSON",
+        "Ccy Yoy Row Json",
+        "CCY YOY ROW JSON",
+      ]),
+  ];
+
+  const seen = new Set();
+  for (const res of jsonKeyResolvers) {
+    const col = typeof res === "function" ? res() : res;
+    if (!col || seen.has(col)) continue;
+    seen.add(col);
+    const parsed = parseSigmaJsonCell(row[col]);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      Object.assign(merged, parsed);
+    }
+  }
+
+  return Object.keys(merged).length ? merged : null;
 }
 
 function findResolvedKeyByCandidates(rowsArr, colsMeta, candidates = []) {
@@ -380,6 +581,144 @@ function getFirstNonEmptyStringForKey(rowsArr, key) {
     if (v != null && String(v).trim() !== "") return String(v).trim();
   }
   return null;
+}
+
+function filterYoyOppRowsByCeoBl(rowsArr, colsMeta, ceoBusinessLine, config) {
+  if (!Array.isArray(rowsArr) || rowsArr.length === 0) return rowsArr;
+  const wantRaw = String(ceoBusinessLine ?? "All").trim();
+  if (!wantRaw || wantRaw.toLowerCase() === "all") return rowsArr;
+
+  const jsonKey = resolveCcyYoyRowJsonKey(rowsArr, colsMeta, config);
+  const blKey = findResolvedKeyByCandidates(rowsArr, colsMeta, ["business_line", "BUSINESS_LINE", "Business Line", "bl"]);
+
+  return rowsArr.filter((r) => {
+    const rawBl = rowBusinessLineForYoyCeoFilter(r, blKey, jsonKey);
+    return yoyCardRowMatchesBusinessLine(wantRaw, rawBl);
+  });
+}
+
+function isCreateCloseYoyOppLevelDataset(rowsArr, colsMeta, config) {
+  if (!Array.isArray(rowsArr) || rowsArr.length === 0) return false;
+  const rowJson = resolveCcyYoyRowJsonKey(rowsArr, colsMeta, config);
+  /* JSON-only Sigma output (no opp_id / ACV scalars) still rolls up from parsed cells. */
+  if (rowJson) return true;
+
+  const oppKey = findResolvedKeyByCandidates(rowsArr, colsMeta, ["opp_id", "OPP_ID", "Opportunity Id"]);
+  if (!oppKey) return false;
+  const currWon = findResolvedKeyByCandidates(rowsArr, colsMeta, ["ccy_curr_won_acv", "CCY_CURR_WON_ACV"]);
+  const ptyWon = findResolvedKeyByCandidates(rowsArr, colsMeta, [
+    "pty_qtd_closed_won_acv",
+    "PTY_QTD_CLOSED_WON_ACV",
+    "ccy_prior_won_acv",
+    "CCY_PRIOR_WON_ACV",
+  ]);
+  return !!(currWon || ptyWon);
+}
+
+/**
+ * Roll up opportunity-level YoY card rows into one payload object (metric cards + drill pills).
+ */
+function aggregateCreateCloseYoyFromOppRows(rowsArr, colsMeta, config, ceoBusinessLine, currWonQtdFromMainCard) {
+  if (!isCreateCloseYoyOppLevelDataset(rowsArr, colsMeta, config)) return null;
+
+  const filtered = filterYoyOppRowsByCeoBl(rowsArr, colsMeta, ceoBusinessLine, config);
+  if (!filtered.length) return null;
+
+  const jsonKey = resolveCcyYoyRowJsonKey(filtered, colsMeta, config);
+
+  const kCw = findResolvedKeyByCandidates(filtered, colsMeta, ["ccy_curr_won_acv", "CCY_CURR_WON_ACV"]);
+  const kPw = findResolvedKeyByCandidates(filtered, colsMeta, [
+    "pty_qtd_closed_won_acv",
+    "PTY_QTD_CLOSED_WON_ACV",
+    "ccy_prior_won_acv",
+    "CCY_PRIOR_WON_ACV",
+  ]);
+  const kCo = findResolvedKeyByCandidates(filtered, colsMeta, ["ccy_curr_open_acv", "CCY_CURR_OPEN_ACV"]);
+  const kPo = findResolvedKeyByCandidates(filtered, colsMeta, ["ccy_prior_open_acv", "CCY_PRIOR_OPEN_ACV"]);
+
+  let sumCw = 0;
+  let sumPw = 0;
+  let sumCo = 0;
+  let sumPo = 0;
+
+  for (const r of filtered) {
+    let j = null;
+    if (jsonKey) j = parseSigmaJsonCell(r?.[jsonKey]);
+
+    const cw =
+      toNumber(kCw ? r?.[kCw] : null) ??
+      toNumber(j && typeof j === "object" ? j.ccy_curr_won_acv : null) ??
+      0;
+    const pw =
+      toNumber(kPw ? r?.[kPw] : null) ??
+      toNumber(j && typeof j === "object" ? j.pty_qtd_closed_won_acv : null) ??
+      toNumber(j && typeof j === "object" ? j.ccy_prior_won_acv : null) ??
+      0;
+    const co =
+      toNumber(kCo ? r?.[kCo] : null) ??
+      toNumber(j && typeof j === "object" ? j.ccy_curr_open_acv : null) ??
+      0;
+    const po =
+      toNumber(kPo ? r?.[kPo] : null) ??
+      toNumber(j && typeof j === "object" ? j.ccy_prior_open_acv : null) ??
+      0;
+
+    sumCw += cw;
+    sumPw += pw;
+    sumCo += co;
+    sumPo += po;
+  }
+
+  const currOverride = toNumber(currWonQtdFromMainCard);
+  if ((!kCw || sumCw === 0) && currOverride != null) {
+    sumCw = currOverride;
+  }
+
+  const r0 = filtered[0];
+  const j0 = jsonKey ? parseSigmaJsonCell(r0?.[jsonKey]) : null;
+  const pickCtx = (scalarCands, jsonFieldNames = []) => {
+    const k = findResolvedKeyByCandidates(filtered, colsMeta, scalarCands);
+    if (k && r0?.[k] != null && String(r0[k]).trim() !== "") return r0[k];
+    if (j0 && typeof j0 === "object" && Array.isArray(jsonFieldNames)) {
+      for (const fn of jsonFieldNames) {
+        const v = j0[fn];
+        if (v != null && String(v).trim() !== "") return v;
+      }
+    }
+    return null;
+  };
+
+  const fiscalYearQuarter = pickCtx(["fiscal_year_quarter", "FISCAL_YEAR_QUARTER"], ["fiscal_year_quarter", "selected_fyq"]);
+  const priorFyq = pickCtx(["prior_year_fiscal_year_quarter", "PRIOR_YEAR_FISCAL_YEAR_QUARTER"], ["prior_year_fiscal_year_quarter"]);
+  const asOfDate = pickCtx(["as_of_date", "AS_OF_DATE"], ["as_of_date"]);
+  const dayQ = toNumber(pickCtx(["day_of_quarter", "DAY_OF_QUARTER"], ["day_of_quarter"]));
+  const currQtdStart = pickCtx(["curr_qtd_start", "CURR_QTD_START"], ["curr_qtd_start"]);
+  const currQtdCap = pickCtx(["curr_qtd_cap_date", "CURR_QTD_CAP_DATE"], ["curr_qtd_cap_date"]);
+  const pyQtdStart = pickCtx(["py_qtd_start", "PY_QTD_START"], ["py_qtd_start"]);
+  const pyQtdCap = pickCtx(["py_qtd_cap_date", "PY_QTD_CAP_DATE"], ["py_qtd_cap_date"]);
+
+  const wantBl = ceoBusinessLine ?? "All";
+  const blLabel = !wantBl || wantBl === "All" ? null : String(wantBl);
+
+  return {
+    fiscal_year_quarter: fiscalYearQuarter ?? null,
+    prior_year_fiscal_year_quarter: priorFyq ?? null,
+    as_of_date: asOfDate ?? null,
+    day_of_quarter: dayQ != null ? dayQ : null,
+    curr_qtd_start: currQtdStart ?? null,
+    curr_qtd_cap_date: currQtdCap ?? null,
+    py_qtd_start: pyQtdStart ?? null,
+    py_qtd_cap_date: pyQtdCap ?? null,
+    business_line: blLabel,
+    curr_closed_won_qtd_amt: sumCw,
+    prior_closed_won_qtd_amt: sumPw,
+    closed_won_qtd_yoy_pct: sumPw === 0 ? null : (sumCw - sumPw) / sumPw,
+    curr_open_pipe_qtd_amt: sumCo,
+    prior_open_pipe_qtd_amt: sumPo,
+    open_pipe_qtd_yoy_pct: sumPo === 0 ? null : (sumCo - sumPo) / sumPo,
+    /* Prior-FY same-quarter C&C closed-won opps (CEO BL–filtered row count); card + drill use until YoY returns. */
+    prior_fyq_cc_won_opp_count: filtered.length,
+  };
 }
 
 function normalizeForecastCategory(value) {
@@ -592,7 +931,7 @@ function buildForecastMetricRows(rowsArr) {
 }
 
 export function useSigmaData(params = {}) {
-  const { cpoAccountId, cpoIterableOrgId, cpoAccountName } = params;
+  const { cpoAccountId, cpoIterableOrgId, cpoAccountName, ceoBusinessLine } = params;
   const config = useConfig();
 
   useEffect(() => {
@@ -637,6 +976,7 @@ export function useSigmaData(params = {}) {
 
     commitCard: config?.source_commit_card,
     createCloseCard: config?.source_create_close_card,
+    createCloseYoyCard: config?.source_create_close_yoy_card,
     createCloseDetail: config?.source_create_close_detail,
 
     closedTrend: config?.source_closed_trend,
@@ -686,6 +1026,7 @@ export function useSigmaData(params = {}) {
 
     commitCard: useElementData(asElementId(sources.commitCard)),
     createCloseCard: useElementData(asElementId(sources.createCloseCard)),
+    createCloseYoyCard: useElementData(asElementId(sources.createCloseYoyCard)),
     createCloseDetail: useElementData(asElementId(sources.createCloseDetail)),
 
     closedTrend: useElementData(asElementId(sources.closedTrend)),
@@ -731,6 +1072,7 @@ export function useSigmaData(params = {}) {
   const colsRevintelTree = useElementColumns(asElementId(sources.revintelTree));
   const colsCommitCard = useElementColumns(asElementId(sources.commitCard));
   const colsCreateCloseCard = useElementColumns(asElementId(sources.createCloseCard));
+  const colsCreateCloseYoyCard = useElementColumns(asElementId(sources.createCloseYoyCard));
   const colsCreateCloseDetail = useElementColumns(asElementId(sources.createCloseDetail));
 
   const colsClosedTrend = useElementColumns(asElementId(sources.closedTrend));
@@ -775,6 +1117,7 @@ export function useSigmaData(params = {}) {
       revintelTree: colsRevintelTree,
       commitCard: colsCommitCard,
       createCloseCard: colsCreateCloseCard,
+      createCloseYoyCard: colsCreateCloseYoyCard,
       createCloseDetail: colsCreateCloseDetail,
 
       closedTrend: colsClosedTrend,
@@ -812,6 +1155,7 @@ export function useSigmaData(params = {}) {
       colsRevintelTree,
       colsCommitCard,
       colsCreateCloseCard,
+      colsCreateCloseYoyCard,
       colsCreateCloseDetail,
       colsClosedTrend,
       colsCpoAccounts,
@@ -873,6 +1217,7 @@ export function useSigmaData(params = {}) {
 
       commitCard: processRows(sources.commitCard, raw.commitCard),
       createCloseCard: processRows(sources.createCloseCard, raw.createCloseCard),
+      createCloseYoyCard: processRows(sources.createCloseYoyCard, raw.createCloseYoyCard),
       createCloseDetail: processRows(sources.createCloseDetail, raw.createCloseDetail),
 
       closedTrend: processRows(sources.closedTrend, raw.closedTrend),
@@ -919,6 +1264,13 @@ export function useSigmaData(params = {}) {
       ? { rows: rows.createCloseCard, cols: columns.createCloseCard }
       : companyEffective;
   }, [rows.createCloseCard, columns.createCloseCard, companyEffective]);
+
+  /** YoY-only card: do not fall back to company rows (wrong shape). Empty → use legacy ccc_* YoY on main card. */
+  const createCloseYoyCardEffective = useMemo(() => {
+    return rows.createCloseYoyCard.length
+      ? { rows: rows.createCloseYoyCard, cols: columns.createCloseYoyCard }
+      : { rows: [], cols: columns.createCloseYoyCard };
+  }, [rows.createCloseYoyCard, columns.createCloseYoyCard]);
 
   const getColumnValues = (rowsArr, colsMeta, cfgKey) => {
     const cfgVal = config?.[cfgKey];
@@ -1349,6 +1701,61 @@ export function useSigmaData(params = {}) {
         })
         .filter(Boolean);
     }, [rows?.drillForecastAttainmentPayload, faPayloadKey]);
+
+  const ccyYoyPayloadKey = useMemo(() => {
+    const src = rows?.createCloseYoyCard || [];
+    const cols = columns?.createCloseYoyCard;
+    if (!src.length) return null;
+    return (
+      resolveRowKey(config?.ccy_yoy_row_json, src, cols) ||
+      findRowKeyByCandidates(src, [
+        "ccy_yoy_row_json",
+        "CCY_YOY_ROW_JSON",
+        "Ccy Yoy Row Json",
+        "CCY YOY ROW JSON",
+        "create_close_yoy_payload",
+        "cc_yoy_payload",
+        "payload",
+        "Payload",
+      ])
+    );
+  }, [config?.ccy_yoy_row_json, rows?.createCloseYoyCard, columns?.createCloseYoyCard]);
+
+  const ccyYoyPayloadObject = useMemo(() => {
+    const src = Array.isArray(rows?.createCloseYoyCard) ? rows.createCloseYoyCard : [];
+    if (!src.length) return null;
+
+    const cols = columns?.createCloseYoyCard;
+    const currWonQtdFromMainCard = getSmartMoney(
+      createCloseCardEffective.rows,
+      createCloseCardEffective.cols,
+      "ccc_closed_won_qtd_amt"
+    );
+    const rolled = aggregateCreateCloseYoyFromOppRows(src, cols, config, ceoBusinessLine, currWonQtdFromMainCard);
+    if (rolled) return rolled;
+
+    const picked = pickCreateCloseYoyRow(src, cols, ceoBusinessLine);
+    if (picked) {
+      const merged = buildCreateCloseYoyPayloadMergedRow(picked, cols, config);
+      if (merged) return merged;
+    }
+
+    if (!ccyYoyPayloadKey) return null;
+    for (const r of src) {
+      const parsed = parseSigmaJsonCell(r?.[ccyYoyPayloadKey]);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+
+    return null;
+  }, [
+    rows?.createCloseYoyCard,
+    columns?.createCloseYoyCard,
+    config,
+    ceoBusinessLine,
+    ccyYoyPayloadKey,
+    createCloseCardEffective.rows,
+    createCloseCardEffective.cols,
+  ]);
 
   const data = useMemo(() => {
     // -----------------------------------------------------------------------
@@ -1841,7 +2248,7 @@ const {
       null;
 
     // ------------------------------------------------------------
-    // Create & Close card
+    // Create & Close card (ccc_* $ on main card; YoY from JSON payload or legacy columns)
     // ------------------------------------------------------------
     const createCloseWonQtd = getSmartMoney(
       createCloseCardEffective.rows,
@@ -1855,17 +2262,43 @@ const {
       "ccc_open_pipe_qtd_amt"
     );
 
-    const createCloseWonQtdYoy = getFirstNumber(
-      createCloseCardEffective.rows,
-      createCloseCardEffective.cols,
-      "ccc_closed_won_qtd_yoy_pct"
-    );
+    const ccyYoy = ccyYoyPayloadObject;
 
-    const createCloseOpenPipeQtdYoy = getFirstNumber(
-      createCloseCardEffective.rows,
-      createCloseCardEffective.cols,
-      "ccc_open_pipe_qtd_yoy_pct"
-    );
+    const createCloseWonQtdYoy =
+      firstNumberFromObject(ccyYoy, ["closed_won_qtd_yoy_pct", "closedWonQtdYoyPct"]) ??
+      getFirstNumberByCandidates(createCloseYoyCardEffective.rows, createCloseYoyCardEffective.cols, "ccy_closed_won_qtd_yoy_pct", [
+        "closed_won_qtd_yoy_pct",
+        "CLOSED_WON_QTD_YOY_PCT",
+      ]) ??
+      getFirstNumber(
+        createCloseYoyCardEffective.rows,
+        createCloseYoyCardEffective.cols,
+        "ccy_closed_won_qtd_yoy_pct"
+      ) ??
+      getFirstNumber(
+        createCloseCardEffective.rows,
+        createCloseCardEffective.cols,
+        "ccc_closed_won_qtd_yoy_pct"
+      );
+
+    const createCloseOpenPipeQtdYoy =
+      firstNumberFromObject(ccyYoy, ["open_pipe_qtd_yoy_pct", "openPipeQtdYoyPct"]) ??
+      getFirstNumberByCandidates(createCloseYoyCardEffective.rows, createCloseYoyCardEffective.cols, "ccy_open_pipe_qtd_yoy_pct", [
+        "open_pipe_qtd_yoy_pct",
+        "OPEN_PIPE_QTD_YOY_PCT",
+      ]) ??
+      getFirstNumber(
+        createCloseYoyCardEffective.rows,
+        createCloseYoyCardEffective.cols,
+        "ccy_open_pipe_qtd_yoy_pct"
+      ) ??
+      getFirstNumber(
+        createCloseCardEffective.rows,
+        createCloseCardEffective.cols,
+        "ccc_open_pipe_qtd_yoy_pct"
+      );
+
+    const ccWonPtyQtdOppCount = firstNumberFromObject(ccyYoy, ["prior_fyq_cc_won_opp_count", "priorFyqCcWonOppCount"]);
 
     // ------------------------------------------------------------
     // Closed Trend
@@ -2113,13 +2546,18 @@ const {
         cc_open_pipe_qtd: createCloseOpenPipeQtd,
         cc_won_qtd_yoy: createCloseWonQtdYoy,
         cc_open_pipe_qtd_yoy: createCloseOpenPipeQtdYoy,
+        cc_won_pty_qtd_opp_count: ccWonPtyQtdOppCount,
+        cc_yoy_payload: ccyYoy && typeof ccyYoy === "object" ? ccyYoy : null,
 
         debug: {
           forecastSource: commitCardForecastMetrics.debug,
           commitCardSourceDetected,
           commitCardTerritoryKey,
           commitCardGlobalRowCount: safeLen(commitCardGlobalRows),
-          createCloseSourceDetected: safeLen(rows.createCloseCard) > 0,
+          createCloseSourceDetected: safeLen(rows.createCloseCard) > 0 || safeLen(rows.createCloseYoyCard) > 0,
+          createCloseYoyCardSourceDetected: safeLen(rows.createCloseYoyCard) > 0,
+          createCloseYoyPayloadKey: ccyYoyPayloadKey ?? null,
+          createCloseYoyPayloadParsed: ccyYoy != null,
           createCloseDetailSourceDetected: safeLen(rows.createCloseDetail) > 0,
           finalChosenValues: {
             commit: derivedCommit,
@@ -2138,6 +2576,7 @@ const {
             cc_open_pipe_qtd: createCloseOpenPipeQtd,
             cc_won_qtd_yoy: createCloseWonQtdYoy,
             cc_open_pipe_qtd_yoy: createCloseOpenPipeQtdYoy,
+            cc_won_pty_qtd_opp_count: ccWonPtyQtdOppCount,
           },
         },
       },
@@ -2346,6 +2785,9 @@ const {
       rollupEffective,
       commitCardEffective,
       createCloseCardEffective,
+      createCloseYoyCardEffective,
+      ccyYoyPayloadObject,
+      ccyYoyPayloadKey,
       cpoIterableOrgId,
       cpoAccountId,
       cpoAccountName,
@@ -2380,6 +2822,7 @@ const {
       revintelTree: sources.revintelTree ?? null,
       commitCard: sources.commitCard ?? null,
       createCloseCard: sources.createCloseCard ?? null,
+      createCloseYoyCard: sources.createCloseYoyCard ?? null,
       createCloseDetail: sources.createCloseDetail ?? null,
       closedTrend: sources.closedTrend ?? null,
       cpoAccounts: sources.cpoAccounts ?? null,
@@ -2405,6 +2848,7 @@ const {
       revintelTree: safeLen(rows.revintelTree),
       commitCard: safeLen(rows.commitCard),
       createCloseCard: safeLen(rows.createCloseCard),
+      createCloseYoyCard: safeLen(rows.createCloseYoyCard),
       createCloseDetail: safeLen(rows.createCloseDetail),
       closedTrend: safeLen(rows.closedTrend),
       cpoAccounts: safeLen(rows.cpoAccounts),
@@ -2424,6 +2868,7 @@ const {
         revintelTree: firstKeys(rows.revintelTree),
         commitCard: firstKeys(rows.commitCard),
         createCloseCard: firstKeys(rows.createCloseCard),
+        createCloseYoyCard: firstKeys(rows.createCloseYoyCard),
         createCloseDetail: firstKeys(rows.createCloseDetail),
         closedTrend: firstKeys(rows.closedTrend),
         cpoAccounts: firstKeys(rows.cpoAccounts),
@@ -2465,6 +2910,9 @@ const {
         ccc_closed_won_qtd_yoy_pct: config?.ccc_closed_won_qtd_yoy_pct ?? null,
         ccc_open_pipe_qtd_yoy_pct: config?.ccc_open_pipe_qtd_yoy_pct ?? null,
 
+        source_create_close_yoy_card: config?.source_create_close_yoy_card ?? null,
+        ccy_yoy_row_json: config?.ccy_yoy_row_json ?? null,
+
         source_create_close_detail: config?.source_create_close_detail ?? null,
         ccd_fiscal_yearquarter: config?.ccd_fiscal_yearquarter ?? null,
         ccd_day_of_quarter: config?.ccd_day_of_quarter ?? null,
@@ -2498,6 +2946,7 @@ const {
     (sources.revintelTree && !raw.revintelTree) ||
     (sources.commitCard && !raw.commitCard) ||
     (sources.createCloseCard && !raw.createCloseCard) ||
+    (sources.createCloseYoyCard && !raw.createCloseYoyCard) ||
     (sources.createCloseDetail && !raw.createCloseDetail) ||
     (sources.closedTrend && !raw.closedTrend) ||
     (sources.cpoAccounts && !raw.cpoAccounts) ||
@@ -2539,6 +2988,15 @@ useEffect(() => {
     source: sources.createCloseCard,
     rowCount: rows.createCloseCard?.length ?? 0,
     firstRowKeys: rows.createCloseCard?.[0] ? Object.keys(rows.createCloseCard[0]).slice(0, 20) : [],
+  });
+
+  debugLog("[SALT] Create & Close YoY card:", {
+    source: sources.createCloseYoyCard,
+    rowCount: rows.createCloseYoyCard?.length ?? 0,
+    firstRowKeys: rows.createCloseYoyCard?.[0] ? Object.keys(rows.createCloseYoyCard[0]).slice(0, 20) : [],
+    yoySourceDetected: data?.co?.debug?.createCloseYoyCardSourceDetected ?? false,
+    payloadKey: data?.co?.debug?.createCloseYoyPayloadKey ?? null,
+    payloadParsed: data?.co?.debug?.createCloseYoyPayloadParsed ?? false,
   });
 
   debugLog("[SALT] Create & Close detail:", {
@@ -2640,6 +3098,11 @@ useEffect(() => {
   data?.co?.debug?.forecastSource?.chosenValues,
   sources.createCloseCard,
   rows.createCloseCard,
+  sources.createCloseYoyCard,
+  rows.createCloseYoyCard,
+  data?.co?.debug?.createCloseYoyCardSourceDetected,
+  data?.co?.debug?.createCloseYoyPayloadKey,
+  data?.co?.debug?.createCloseYoyPayloadParsed,
   sources.createCloseDetail,
   rows.createCloseDetail,
   sources.closedTrend,

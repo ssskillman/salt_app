@@ -123,17 +123,8 @@ export const editorConfig = [
   { name: "hm_outcome", type: "column", source: "source_horseman", label: "CORE · HM: Outcome Bucket (string)" },
   { name: "hm_value", type: "column", source: "source_horseman", label: "CORE · HM: Value ($)" },
 
-  { name: "hmd_opp_id", type: "column", source: "source_horseman_detail", label: "CORE · HMD: opportunity_id" },
-  { name: "hmd_opp_name", type: "column", source: "source_horseman_detail", label: "CORE · HMD: opportunity_name" },
-  { name: "hmd_owner", type: "column", source: "source_horseman_detail", label: "CORE · HMD: opportunity_owner" },
-  { name: "hmd_stage", type: "column", source: "source_horseman_detail", label: "CORE · HMD: opportunity_stage" },
-  { name: "hmd_close", type: "column", source: "source_horseman_detail", label: "CORE · HMD: opportunity_close_date" },
-  { name: "hmd_arr", type: "column", source: "source_horseman_detail", label: "CORE · HMD: ARR/Revenue ($)" },
-  { name: "hmd_source", type: "column", source: "source_horseman_detail", label: "HMD: source (SDR/Marketing/AE)" },
-  { name: "hmd_created_by", type: "column", source: "source_horseman_detail", label: "CORE · HMD: Created By (name)" },
-  { name: "hmd_outcome", type: "column", source: "source_horseman_detail", label: "HMD: outcome bucket (won/lost/open)" },
-  { name: "hmd_deal_review", type: "column", source: "source_horseman_detail", label: "CORE · HMD: Deal Review (full text)" },
-  { name: "hmd_deal_review_short", type: "column", source: "source_horseman_detail", label: "CORE · HMD: Deal Review Short Version" },
+  // One JSON column for Horseman drill rows (see src/utils/horsemanDetailPayload.js for OBJECT_CONSTRUCT shape).
+  { name: "hmd_row_payload", type: "column", source: "source_horseman_detail", label: "CORE · HMD: Row payload (JSON)" },
 
   // ------------------------------------------------------------
   // DRILL: CAGR
@@ -286,5 +277,11 @@ export const editorConfig = [
 
   { name: "source_product_mix_payload", type: "element", label: "CORE · Product Mix Payload" },
   { name: "product_mix_payload", type: "column", source: "source_product_mix_payload", label: "Product Mix · Payload JSON" },
+
+  // ------------------------------------------------------------
+  // Create & Close: YoY — one row per opp (reference_sql/create_close_yoy_card.sql)
+  // ------------------------------------------------------------
+  { name: "source_create_close_yoy_card", type: "element", label: "CORE · Create & Close YoY (opp-level)" },
+  { name: "ccy_yoy_row_json", type: "column", source: "source_create_close_yoy_card", label: "CORE · CC YoY · Row JSON (per opp)" },
 
 ];

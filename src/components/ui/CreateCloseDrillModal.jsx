@@ -3,11 +3,11 @@
 import React, { useMemo, useState, useEffect } from "react";
 import Modal from "./Modal";
 import { resolveColumnKey } from "../../utils/data.jsx";
-import { fmtMoneyCompact, fmtPct1, toNumber, ceoBusinessLineDisplayLabel } from "../../utils/formatters.jsx";
+import { fmtMoneyCompact, fmtPct1, fmtInt, toNumber, ceoBusinessLineDisplayLabel } from "../../utils/formatters.jsx";
 import DrillModalContextBar from "./DrillModalContextBar.jsx";
 
 const CREATE_CLOSE_DRILL_CONTEXT =
-  "Opportunities that created and closed in the same fiscal quarter (per your Sigma mapping). Sort columns to compare owners, stages, and amounts.";
+  "Create-and-close opportunities in the prior fiscal year quarter that matches your Sigma prompt (same quarter index). Sort columns to compare owners, stages, and closed-won ACV.";
 
 const SALESFORCE_OPP_BASE_URL =
   "https://iterable.lightning.force.com/lightning/r/Opportunity";
@@ -41,6 +41,16 @@ function findRowKeyByCandidates(rowsArr, candidates = []) {
     if (suffix) return suffix;
   }
 
+  return null;
+}
+
+function firstNumFromObj(obj, keys) {
+  if (!obj || typeof obj !== "object") return null;
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+    const n = toNumber(obj[k]);
+    if (n != null) return n;
+  }
   return null;
 }
 
@@ -169,6 +179,20 @@ function buildOppUrl(oppId) {
   return `${SALESFORCE_OPP_BASE_URL}/${id}/view`;
 }
 
+function pickPayloadScalar(obj, keys) {
+  if (!obj || typeof obj !== "object") return null;
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+    const v = obj[k];
+    if (v != null && String(v).trim() !== "") return v;
+  }
+  return null;
+}
+
+function pickPayloadNumber(obj, keys) {
+  return toNumber(pickPayloadScalar(obj, keys));
+}
+
 function SortableHeader({ label, sortKey, sortState, onToggle, align = "left" }) {
   const isActive = sortState.key === sortKey;
   const arrow = !isActive ? "↕" : sortState.direction === "asc" ? "↑" : "↓";
@@ -268,6 +292,10 @@ export default function CreateCloseDrillModal({
   contextHelper,
   definitionsSection = "create_close",
   onOpenDefinitions,
+  /**
+   * YoY context for pills: merged object from useSigmaData (`ccy_yoy_row_json` per row + rollups).
+   */
+  yoyPayloadSummary = null,
 }) {
   const [sortState, setSortState] = useState({
     key: "value",
@@ -284,6 +312,9 @@ export default function CreateCloseDrillModal({
   }, [open, metricName]);
 
   const showCloseBadges = useMemo(() => shouldShowCloseDateBadge(metricName), [metricName]);
+
+  /* Prior-FY C&C drill: no CY vs PY % in the modal for now — ACV + context only. */
+  const ptyOnlyWonYoy = useMemo(() => String(metricName ?? "").trim().toLowerCase() === "won qtd yoy", [metricName]);
 
   const keys = useMemo(() => {
     return {
@@ -330,12 +361,18 @@ export default function CreateCloseDrillModal({
         findRowKeyByCandidates(rows, ["cc_qtd_open_pipe"]) ||
         findColIdByName(columns, "Cc Qtd Open Pipe"),
 
+      /* Prefer prior-FY / PTY ACV (Sigma often still ships ccy_curr_won_acv = 0 on the same rows). */
       closedWonYoyPct:
+        findRowKeyByCandidates(rows, ["pty_qtd_closed_won_acv", "PTY_QTD_CLOSED_WON_ACV"]) ||
+        findRowKeyByCandidates(rows, ["ccy_prior_won_acv", "CCY_PRIOR_WON_ACV"]) ||
+        findRowKeyByCandidates(rows, ["closed_acv", "CLOSED_ACV"]) ||
         findRowKeyByCandidates(rows, ["cc_qtd_closed_won_yoy_pct"]) ||
+        findRowKeyByCandidates(rows, ["ccy_curr_won_acv", "CCY_CURR_WON_ACV"]) ||
         findColIdByName(columns, "Cc Qtd Closed Won Yoy Pct"),
 
       openPipeYoyPct:
         findRowKeyByCandidates(rows, ["cc_qtd_open_pipe_yoy_pct"]) ||
+        findRowKeyByCandidates(rows, ["ccy_curr_open_acv", "CCY_CURR_OPEN_ACV"]) ||
         findColIdByName(columns, "Cc Qtd Open Pipe Yoy Pct"),
     };
   }, [columns, rows]);
@@ -361,17 +398,19 @@ export default function CreateCloseDrillModal({
 
     if (m === "won qtd yoy") {
       return {
-        label: "Won QTD YoY",
+        label: "ACV Amount",
         valueKey: keys.closedWonYoyPct,
-        totalType: "pct",
+        totalType: "money",
+        rowValueIsMoney: true,
       };
     }
 
-    if (m === "open pipelinr qtd yoy") {
+    if (m === "open pipeline qtd yoy" || m === "open pipelinr qtd yoy") {
       return {
-        label: "Open Pipeline QTD YoY",
+        label: "CY QTD open pipe $",
         valueKey: keys.openPipeYoyPct,
         totalType: "pct",
+        rowValueIsMoney: true,
       };
     }
 
@@ -380,19 +419,38 @@ export default function CreateCloseDrillModal({
       valueKey: null,
       totalType: "money",
     };
-  }, [
-    metricName,
-    keys.closedWon,
-    keys.openPipe,
-    keys.closedWonYoyPct,
-    keys.openPipeYoyPct,
-  ]);
+  }, [metricName, rows, keys.closedWon, keys.openPipe, keys.closedWonYoyPct, keys.openPipeYoyPct]);
+
+  const yoyDrillUsesMoneyCells = metricConfig.rowValueIsMoney === true;
 
   const hideStageColumn = useMemo(() => {
     return String(metricName ?? "").trim().toLowerCase() === "won qtd";
   }, [metricName]);
 
   const filteredRows = useMemo(() => {
+    const m = String(metricName ?? "").trim().toLowerCase();
+    const isWonYoy = m === "won qtd yoy";
+    const isOpenYoy = m === "open pipeline qtd yoy" || m === "open pipelinr qtd yoy";
+
+    if (isWonYoy || isOpenYoy) {
+      const cwK = findRowKeyByCandidates(rows, ["ccy_curr_won_acv", "CCY_CURR_WON_ACV"]);
+      const pwK =
+        findRowKeyByCandidates(rows, ["pty_qtd_closed_won_acv", "PTY_QTD_CLOSED_WON_ACV"]) ||
+        findRowKeyByCandidates(rows, ["ccy_prior_won_acv", "CCY_PRIOR_WON_ACV"]);
+      const coK = findRowKeyByCandidates(rows, ["ccy_curr_open_acv", "CCY_CURR_OPEN_ACV"]);
+      const poK = findRowKeyByCandidates(rows, ["ccy_prior_open_acv", "CCY_PRIOR_OPEN_ACV"]);
+      return rows.filter((r) => {
+        if (isWonYoy) {
+          const cw = toNumber(cwK ? r[cwK] : null) ?? 0;
+          const pw = toNumber(pwK ? r[pwK] : null) ?? 0;
+          return cw !== 0 || pw !== 0;
+        }
+        const co = toNumber(coK ? r[coK] : null) ?? 0;
+        const po = toNumber(poK ? r[poK] : null) ?? 0;
+        return co !== 0 || po !== 0;
+      });
+    }
+
     const valueKey = metricConfig.valueKey;
     if (!valueKey) return [];
 
@@ -401,7 +459,7 @@ export default function CreateCloseDrillModal({
       const num = toNumber(raw);
       return num != null && num !== 0;
     });
-  }, [rows, metricConfig.valueKey]);
+  }, [rows, metricConfig.valueKey, metricName]);
 
     const ownerValues = useMemo(() => {
     if (!keys.oppOwnerName || !filteredRows.length) return [];
@@ -468,6 +526,14 @@ export default function CreateCloseDrillModal({
   }, [filteredRows, keys, metricConfig.valueKey, sortState]);
 
   const totalValue = useMemo(() => {
+    const m = String(metricName ?? "").trim().toLowerCase();
+    const isWonYoy = m === "won qtd yoy";
+    const isOpenYoy = m === "open pipeline qtd yoy" || m === "open pipelinr qtd yoy";
+    if (!isWonYoy && isOpenYoy && yoyPayloadSummary && typeof yoyPayloadSummary === "object") {
+      const pct = firstNumFromObj(yoyPayloadSummary, ["open_pipe_qtd_yoy_pct", "openPipeQtdYoyPct"]);
+      if (pct != null) return pct;
+    }
+
     const valueKey = metricConfig.valueKey;
     if (!valueKey) return null;
 
@@ -482,7 +548,7 @@ export default function CreateCloseDrillModal({
     }
 
     return nums.reduce((sum, n) => sum + n, 0);
-  }, [filteredRows, metricConfig]);
+  }, [filteredRows, metricConfig, metricName, yoyPayloadSummary]);
 
   const summaryFiscalYearquarter = useMemo(() => {
     if (!keys.fiscalYearquarter || !filteredRows.length) return "—";
@@ -494,8 +560,58 @@ export default function CreateCloseDrillModal({
   }, [filteredRows, keys.fiscalYearquarter]);
 
   const subtitle = useMemo(() => {
+    if (ptyOnlyWonYoy) {
+      return `Prior FY (same quarter as prompt) • ${filteredRows.length} opps`;
+    }
     return `Metric: ${metricConfig.label} • Rows: ${filteredRows.length}`;
-  }, [metricConfig.label, filteredRows.length]);
+  }, [metricConfig.label, filteredRows.length, ptyOnlyWonYoy]);
+
+  const yoyDrillContext = useMemo(() => {
+    const m = String(metricName ?? "").trim().toLowerCase();
+    const showYoY =
+      m === "won qtd yoy" || m === "open pipeline qtd yoy" || m === "open pipelinr qtd yoy";
+    const p = yoyPayloadSummary;
+    if (!showYoY || !p || typeof p !== "object") return null;
+
+    const anchorFyq = pickPayloadScalar(p, ["fiscal_year_quarter", "fiscalYearQuarter"]);
+    const priorFyq = pickPayloadScalar(p, [
+      "prior_year_fiscal_year_quarter",
+      "priorYearFiscalYearQuarter",
+    ]);
+    const asOf = pickPayloadScalar(p, ["as_of_date", "asOfDate"]);
+    const dayQ = pickPayloadNumber(p, ["day_of_quarter", "dayOfQuarter"]);
+    const bl = pickPayloadScalar(p, ["business_line", "businessLine"]);
+
+    const isWon = m === "won qtd yoy";
+    const currAmt = pickPayloadNumber(
+      p,
+      isWon
+        ? ["curr_closed_won_qtd_amt", "currClosedWonQtdAmt"]
+        : ["curr_open_pipe_qtd_amt", "currOpenPipeQtdAmt"]
+    );
+    const priorAmt = pickPayloadNumber(
+      p,
+      isWon
+        ? ["prior_closed_won_qtd_amt", "priorClosedWonQtdAmt"]
+        : ["prior_open_pipe_qtd_amt", "priorOpenPipeQtdAmt"]
+    );
+    const oppCount = pickPayloadNumber(p, ["prior_fyq_cc_won_opp_count", "priorFyqCcWonOppCount"]);
+
+    if (
+      !anchorFyq &&
+      !priorFyq &&
+      !asOf &&
+      dayQ == null &&
+      !bl &&
+      currAmt == null &&
+      priorAmt == null &&
+      oppCount == null
+    ) {
+      return null;
+    }
+
+    return { anchorFyq, priorFyq, asOf, dayQ, bl, currAmt, priorAmt, oppCount };
+  }, [metricName, yoyPayloadSummary]);
 
   const toggleSort = (key) => {
     setSortState((prev) => {
@@ -546,22 +662,86 @@ export default function CreateCloseDrillModal({
             </div>
           ) : null}
 
-          <div style={styles.totalPill}>
-            <span style={styles.totalPillLabel}>FY Quarter</span>
-            <span style={styles.totalPillValue}>{summaryFiscalYearquarter}</span>
-          </div>
+          {!ptyOnlyWonYoy ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>FY Quarter</span>
+              <span style={styles.totalPillValue}>{summaryFiscalYearquarter}</span>
+            </div>
+          ) : null}
 
           <div style={styles.totalPill}>
             <span style={styles.totalPillLabel}>Business Line</span>
             <span style={styles.totalPillValue}>{ceoBusinessLineDisplayLabel(businessLine)}</span>
           </div>
 
-          <div style={styles.totalPill}>
-            <span style={styles.totalPillLabel}>Total {metricConfig.label}</span>
-            <span style={styles.totalPillValue}>
-              {totalValue == null ? "—" : formatMetricValue(totalValue)}
-            </span>
-          </div>
+          {yoyDrillContext?.anchorFyq ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>{ptyOnlyWonYoy ? "Prompt FYQ" : "YoY · FYQ"}</span>
+              <span style={styles.totalPillValue}>{String(yoyDrillContext.anchorFyq)}</span>
+            </div>
+          ) : null}
+
+          {yoyDrillContext?.priorFyq ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>{ptyOnlyWonYoy ? "Prior FYQ" : "YoY · Prior FYQ"}</span>
+              <span style={styles.totalPillValue}>{String(yoyDrillContext.priorFyq)}</span>
+            </div>
+          ) : null}
+
+          {yoyDrillContext?.asOf ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>{ptyOnlyWonYoy ? "As of" : "YoY · As of"}</span>
+              <span style={styles.totalPillValue}>{fmtDate(yoyDrillContext.asOf)}</span>
+            </div>
+          ) : null}
+
+          {yoyDrillContext?.dayQ != null ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>{ptyOnlyWonYoy ? "Day of quarter" : "YoY · Day of Q"}</span>
+              <span style={styles.totalPillValue}>{String(yoyDrillContext.dayQ)}</span>
+            </div>
+          ) : null}
+
+          {yoyDrillContext?.bl ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>{ptyOnlyWonYoy ? "BL (payload)" : "YoY · BL (payload)"}</span>
+              <span style={styles.totalPillValue}>{String(yoyDrillContext.bl)}</span>
+            </div>
+          ) : null}
+
+          {!ptyOnlyWonYoy && yoyDrillContext?.currAmt != null ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>YoY · CY QTD $</span>
+              <span style={styles.totalPillValue}>{fmtMoneyCompact(yoyDrillContext.currAmt)}</span>
+            </div>
+          ) : null}
+
+          {yoyDrillContext?.priorAmt != null ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>
+                {ptyOnlyWonYoy ? "Prior FYQ · Total closed won ACV" : "YoY · PY QTD $"}
+              </span>
+              <span style={styles.totalPillValue}>{fmtMoneyCompact(yoyDrillContext.priorAmt)}</span>
+            </div>
+          ) : null}
+
+          {ptyOnlyWonYoy ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>Opp Count</span>
+              <span style={styles.totalPillValue}>
+                {fmtInt(yoyDrillContext?.oppCount ?? filteredRows.length)}
+              </span>
+            </div>
+          ) : null}
+
+          {!ptyOnlyWonYoy ? (
+            <div style={styles.totalPill}>
+              <span style={styles.totalPillLabel}>{`Total ${metricConfig.label}`}</span>
+              <span style={styles.totalPillValue}>
+                {totalValue == null ? "—" : formatMetricValue(totalValue)}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div style={styles.columnToggleRow}>
@@ -674,7 +854,9 @@ export default function CreateCloseDrillModal({
                       />
                     </td>
                     <td style={styles.tdAmount}>
-                      {formatMetricValue(rowValue)}
+                      {yoyDrillUsesMoneyCells
+                        ? fmtMoneyCompact(toNumber(rowValue))
+                        : formatMetricValue(rowValue)}
                     </td>
                   </tr>
                 );
