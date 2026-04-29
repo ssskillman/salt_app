@@ -464,6 +464,18 @@ function buildCreateCloseYoyPayloadMergedRow(row, colsMeta, config) {
     ["closed_won_qtd_yoy_pct", ["closed_won_qtd_yoy_pct", "CLOSED_WON_QTD_YOY_PCT"]],
     ["curr_open_pipe_qtd_amt", ["curr_open_pipe_qtd_amt", "CURR_OPEN_PIPE_QTD_AMT"]],
     ["prior_open_pipe_qtd_amt", ["prior_open_pipe_qtd_amt", "PRIOR_OPEN_PIPE_QTD_AMT"]],
+    [
+      "prior_fyq_cc_open_pipe_opp_count",
+      ["prior_fyq_cc_open_pipe_opp_count", "PRIOR_FYQ_CC_OPEN_PIPE_OPP_COUNT", "prior_fyq_open_pipe_opp_count"],
+    ],
+    [
+      "curr_fyq_cc_open_pipe_opp_count",
+      ["curr_fyq_cc_open_pipe_opp_count", "CURR_FYQ_CC_OPEN_PIPE_OPP_COUNT"],
+    ],
+    [
+      "curr_fyq_cc_won_opp_count",
+      ["curr_fyq_cc_won_opp_count", "CURR_FYQ_CC_WON_OPP_COUNT"],
+    ],
     ["open_pipe_qtd_yoy_pct", ["open_pipe_qtd_yoy_pct", "OPEN_PIPE_QTD_YOY_PCT"]],
   ];
 
@@ -618,7 +630,14 @@ function isCreateCloseYoyOppLevelDataset(rowsArr, colsMeta, config) {
 /**
  * Roll up opportunity-level YoY card rows into one payload object (metric cards + drill pills).
  */
-function aggregateCreateCloseYoyFromOppRows(rowsArr, colsMeta, config, ceoBusinessLine, currWonQtdFromMainCard) {
+function aggregateCreateCloseYoyFromOppRows(
+  rowsArr,
+  colsMeta,
+  config,
+  ceoBusinessLine,
+  currWonQtdFromMainCard,
+  currOpenQtdFromMainCard = null
+) {
   if (!isCreateCloseYoyOppLevelDataset(rowsArr, colsMeta, config)) return null;
 
   const filtered = filterYoyOppRowsByCeoBl(rowsArr, colsMeta, ceoBusinessLine, config);
@@ -640,6 +659,10 @@ function aggregateCreateCloseYoyFromOppRows(rowsArr, colsMeta, config, ceoBusine
   let sumPw = 0;
   let sumCo = 0;
   let sumPo = 0;
+  let priorOpenPipeOppCount = 0;
+  let currOpenPipeOppCount = 0;
+  let priorClosedWonOppCount = 0;
+  let currClosedWonOppCount = 0;
 
   for (const r of filtered) {
     let j = null;
@@ -667,11 +690,21 @@ function aggregateCreateCloseYoyFromOppRows(rowsArr, colsMeta, config, ceoBusine
     sumPw += pw;
     sumCo += co;
     sumPo += po;
+    if (po > 0) priorOpenPipeOppCount += 1;
+    if (co > 0) currOpenPipeOppCount += 1;
+    if (pw > 0) priorClosedWonOppCount += 1;
+    if (cw > 0) currClosedWonOppCount += 1;
   }
 
   const currOverride = toNumber(currWonQtdFromMainCard);
   if ((!kCw || sumCw === 0) && currOverride != null) {
     sumCw = currOverride;
+  }
+
+  /* CY open pipe $ on YoY rows is often 0 (won rows); match CEO main card total for YoY %. */
+  const currOpenOverride = toNumber(currOpenQtdFromMainCard);
+  if ((!kCo || sumCo === 0) && currOpenOverride != null) {
+    sumCo = currOpenOverride;
   }
 
   const r0 = filtered[0];
@@ -712,12 +745,18 @@ function aggregateCreateCloseYoyFromOppRows(rowsArr, colsMeta, config, ceoBusine
     business_line: blLabel,
     curr_closed_won_qtd_amt: sumCw,
     prior_closed_won_qtd_amt: sumPw,
-    closed_won_qtd_yoy_pct: sumPw === 0 ? null : (sumCw - sumPw) / sumPw,
+    closed_won_qtd_yoy_pct:
+      sumPw === 0 ? (sumCw === 0 ? 0 : null) : (sumCw - sumPw) / sumPw,
     curr_open_pipe_qtd_amt: sumCo,
     prior_open_pipe_qtd_amt: sumPo,
-    open_pipe_qtd_yoy_pct: sumPo === 0 ? null : (sumCo - sumPo) / sumPo,
-    /* Prior-FY same-quarter C&C closed-won opps (CEO BL–filtered row count); card + drill use until YoY returns. */
-    prior_fyq_cc_won_opp_count: filtered.length,
+    open_pipe_qtd_yoy_pct:
+      sumPo === 0 ? (sumCo === 0 ? 0 : null) : (sumCo - sumPo) / sumPo,
+    /* Prior-FY same-quarter C&C closed-won opps (rows with PY won ACV > 0; excludes open-only YoY rows). */
+    prior_fyq_cc_won_opp_count: priorClosedWonOppCount,
+    curr_fyq_cc_won_opp_count: currClosedWonOppCount,
+    /* Opps with positive prior-quarter open-pipe ACV on the YoY card (same lookback as `ccy_prior_open_acv`). */
+    prior_fyq_cc_open_pipe_opp_count: priorOpenPipeOppCount,
+    curr_fyq_cc_open_pipe_opp_count: currOpenPipeOppCount,
   };
 }
 
@@ -1731,7 +1770,19 @@ export function useSigmaData(params = {}) {
       createCloseCardEffective.cols,
       "ccc_closed_won_qtd_amt"
     );
-    const rolled = aggregateCreateCloseYoyFromOppRows(src, cols, config, ceoBusinessLine, currWonQtdFromMainCard);
+    const currOpenQtdFromMainCard = getSmartMoney(
+      createCloseCardEffective.rows,
+      createCloseCardEffective.cols,
+      "ccc_open_pipe_qtd_amt"
+    );
+    const rolled = aggregateCreateCloseYoyFromOppRows(
+      src,
+      cols,
+      config,
+      ceoBusinessLine,
+      currWonQtdFromMainCard,
+      currOpenQtdFromMainCard
+    );
     if (rolled) return rolled;
 
     const picked = pickCreateCloseYoyRow(src, cols, ceoBusinessLine);
@@ -2300,6 +2351,21 @@ const {
 
     const ccWonPtyQtdOppCount = firstNumberFromObject(ccyYoy, ["prior_fyq_cc_won_opp_count", "priorFyqCcWonOppCount"]);
 
+    const ccCurrWonPtyQtdOppCount = firstNumberFromObject(ccyYoy, [
+      "curr_fyq_cc_won_opp_count",
+      "currFyqCcWonOppCount",
+    ]);
+
+    const ccOpenPtyQtdOppCount = firstNumberFromObject(ccyYoy, [
+      "prior_fyq_cc_open_pipe_opp_count",
+      "priorFyqCcOpenPipeOppCount",
+    ]);
+
+    const ccCurrOpenPtyQtdOppCount = firstNumberFromObject(ccyYoy, [
+      "curr_fyq_cc_open_pipe_opp_count",
+      "currFyqCcOpenPipeOppCount",
+    ]);
+
     // ------------------------------------------------------------
     // Closed Trend
     // ------------------------------------------------------------
@@ -2547,6 +2613,9 @@ const {
         cc_won_qtd_yoy: createCloseWonQtdYoy,
         cc_open_pipe_qtd_yoy: createCloseOpenPipeQtdYoy,
         cc_won_pty_qtd_opp_count: ccWonPtyQtdOppCount,
+        cc_curr_won_pty_qtd_opp_count: ccCurrWonPtyQtdOppCount,
+        cc_open_pty_qtd_opp_count: ccOpenPtyQtdOppCount,
+        cc_curr_open_pty_qtd_opp_count: ccCurrOpenPtyQtdOppCount,
         cc_yoy_payload: ccyYoy && typeof ccyYoy === "object" ? ccyYoy : null,
 
         debug: {
@@ -2577,6 +2646,9 @@ const {
             cc_won_qtd_yoy: createCloseWonQtdYoy,
             cc_open_pipe_qtd_yoy: createCloseOpenPipeQtdYoy,
             cc_won_pty_qtd_opp_count: ccWonPtyQtdOppCount,
+            cc_curr_won_pty_qtd_opp_count: ccCurrWonPtyQtdOppCount,
+            cc_open_pty_qtd_opp_count: ccOpenPtyQtdOppCount,
+            cc_curr_open_pty_qtd_opp_count: ccCurrOpenPtyQtdOppCount,
           },
         },
       },

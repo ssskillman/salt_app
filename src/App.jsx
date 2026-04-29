@@ -1210,7 +1210,6 @@ export default function App() {
   const closedQTDValue = co.closedQTD ?? null;
   const budgetValue = co.budget ?? null;
 
-
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [leftNavOpen, setLeftNavOpen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -3242,6 +3241,8 @@ const createCloseMetrics = useMemo(() => {
     return {
       wonQTD: scopedCreateCloseSummary.wonQTD,
       openPipeQTD: scopedCreateCloseSummary.openPipeQTD,
+      wonQtdOppCount: null,
+      openPipeQtdOppCount: null,
     };
   }
 
@@ -3262,8 +3263,124 @@ const createCloseMetrics = useMemo(() => {
       (sum, r) => sum + (toNumber(r?.[scopedCreateCloseSpineKeys.openPipe]) || 0),
       0
     ),
+    wonQtdOppCount: wonRows.length,
+    openPipeQtdOppCount: openRows.length,
   };
 }, [scopedCreateCloseSpineRows, scopedCreateCloseSpineKeys, scopedCreateCloseSummary]);
+
+  /** YoY cards: CY $ and opps match Current · QTD metric cards; PY from cc_yoy_payload; % = (CY − PY) / PY for fmtPct1. */
+  const createCloseYoyCardsUi = useMemo(() => {
+    const y = co?.cc_yoy_payload;
+    const cyWon = toNumber(createCloseMetrics.wonQTD);
+    const pyWon = toNumber(y?.prior_closed_won_qtd_amt);
+    const cyOpen = toNumber(createCloseMetrics.openPipeQTD);
+    const pyOpen = toNumber(y?.prior_open_pipe_qtd_amt);
+
+    const wonYoyPct = pyWon === 0 ? (cyWon === 0 ? 0 : null) : (cyWon - pyWon) / pyWon;
+    const openYoyPct = pyOpen === 0 ? (cyOpen === 0 ? 0 : null) : (cyOpen - pyOpen) / pyOpen;
+
+    const cyFyq = y?.fiscal_year_quarter != null ? String(y.fiscal_year_quarter) : "CY QTD";
+    const pyFyq =
+      y?.prior_year_fiscal_year_quarter != null ? String(y.prior_year_fiscal_year_quarter) : "PY QTD";
+
+    const row = (tag, fyq, amt, n) => (
+      <div
+        key={tag}
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "baseline",
+          gap: "0 8px",
+          rowGap: 2,
+        }}
+      >
+        <span style={{ fontWeight: 950, opacity: 0.5, letterSpacing: 0.4 }}>{tag}</span>
+        <span style={{ fontWeight: 850, opacity: 0.72 }}>{fyq}</span>
+        <span style={{ fontWeight: 950, color: "#0b3251" }}>
+          {amt != null ? fmtMoneyCompact(amt) : "—"}
+        </span>
+        {n != null && n > 0 ? (
+          <span style={{ fontWeight: 700, opacity: 0.68 }}>{fmtInt(n)} opps</span>
+        ) : null}
+      </div>
+    );
+
+    const footerStyle = {
+      display: "grid",
+      gap: 8,
+      marginTop: 4,
+      paddingTop: 10,
+      borderTop: "1px solid rgba(15,23,42,0.09)",
+      fontSize: 11,
+      lineHeight: 1.4,
+    };
+
+    const wonFooter = (
+      <div style={footerStyle}>
+        {row("CY", cyFyq, cyWon, createCloseMetrics.wonQtdOppCount)}
+        {row("PY", pyFyq, pyWon, toNumber(co?.cc_won_pty_qtd_opp_count) || null)}
+      </div>
+    );
+
+    const openFooter = (
+      <div style={footerStyle}>
+        {row("CY", cyFyq, cyOpen, createCloseMetrics.openPipeQtdOppCount)}
+        {row("PY", pyFyq, pyOpen, toNumber(co?.cc_open_pty_qtd_opp_count) || null)}
+      </div>
+    );
+
+    const a = y?.fiscal_year_quarter != null ? String(y.fiscal_year_quarter) : null;
+    const b = y?.prior_year_fiscal_year_quarter != null ? String(y.prior_year_fiscal_year_quarter) : null;
+    const wonTitle =
+      a && b
+        ? `Closed-won YoY: ${a} vs same progress in ${b} (CY from Current · QTD cards; PY from YoY element). Click for drillthrough.`
+        : "Prior-year same quarter closed-won YoY. Click for drillthrough.";
+    const openTitle =
+      a && b
+        ? `Open pipe YoY: ${a} vs same progress in ${b} (CY from Current · QTD cards; PY from YoY element). Click for drillthrough.`
+        : "Open pipeline YoY vs prior FY same quarter. Click for drillthrough.";
+
+    const pyWonOpps = toNumber(co?.cc_won_pty_qtd_opp_count);
+    const pyOpenOpps = toNumber(co?.cc_open_pty_qtd_opp_count);
+
+    return {
+      wonYoyPct,
+      openYoyPct,
+      wonFooter,
+      openFooter,
+      wonTitle,
+      openTitle,
+      wonDrillFormula: {
+        cyAmt: cyWon,
+        pyAmt: pyWon,
+        cyOpps: createCloseMetrics.wonQtdOppCount,
+        pyOpps: pyWonOpps,
+        cyFyq,
+        pyFyq,
+        yoyPct: wonYoyPct,
+      },
+      openDrillFormula: {
+        cyAmt: cyOpen,
+        pyAmt: pyOpen,
+        cyOpps: createCloseMetrics.openPipeQtdOppCount,
+        pyOpps: pyOpenOpps,
+        cyFyq,
+        pyFyq,
+        yoyPct: openYoyPct,
+      },
+    };
+  }, [
+    createCloseMetrics.wonQTD,
+    createCloseMetrics.openPipeQTD,
+    createCloseMetrics.wonQtdOppCount,
+    createCloseMetrics.openPipeQtdOppCount,
+    co?.cc_yoy_payload?.prior_closed_won_qtd_amt,
+    co?.cc_yoy_payload?.prior_open_pipe_qtd_amt,
+    co?.cc_yoy_payload?.fiscal_year_quarter,
+    co?.cc_yoy_payload?.prior_year_fiscal_year_quarter,
+    co?.cc_won_pty_qtd_opp_count,
+    co?.cc_open_pty_qtd_opp_count,
+  ]);
 
   const scopedCreateCloseYoyDrillRows = useMemo(() => {
     const yoyRows = rows?.createCloseYoyCard;
@@ -5603,33 +5720,55 @@ const productMixDrillRows = useMemo(() => {
                   }
                   onInfo={() => openDefs("create_close")}
                 />
-                <div style={styles.metricGrid}>
-                  <MetricCard
-                    label="WON QTD"
-                    value={fmtMoneyCompact(createCloseMetrics.wonQTD)}
-                    onClick={() => openCreateCloseDrill("Won QTD")}
-                    title="Click to view Create & Close raw drillthrough rows"
-                  />
-                  <MetricCard
-                    label="Open Pipeline QTD"
-                    value={fmtMoneyCompact(createCloseMetrics.openPipeQTD)}
-                    onClick={() => openCreateCloseDrill("Open Pipe QTD")}
-                    title="Click to view Create & Close raw drillthrough rows"
-                  />
-                  <MetricCard
-                    label="PY QTD Wins"
-                    value={fmtMoneyCompact(toNumber(co?.cc_yoy_payload?.prior_closed_won_qtd_amt))}
-                    subValue={co?.cc_won_pty_qtd_opp_count != null ? fmtInt(co.cc_won_pty_qtd_opp_count) : null}
-                    subLabel={co?.cc_won_pty_qtd_opp_count != null ? "opps" : null}
-                    onClick={() => openCreateCloseDrill("Won QTD YoY")}
-                    title="Prior-year same quarter as prompt: closed-won ACV (main) and opportunity count (opps). Click for drillthrough."
-                  />
-                  <MetricCard
-                    label="Open Pipeline QTD YoY"
-                    value={fmtPct1(scopedCreateCloseSummary.openPipeQTDYoy)}
-                    onClick={() => openCreateCloseDrill("Open Pipeline QTD YoY")}
-                    title="Click to view Create & Close raw drillthrough rows"
-                  />
+                <div style={styles.createCloseCeoMetricsGrid}>
+                  <div style={styles.createCloseMetricCluster}>
+                    <div style={styles.createCloseMetricClusterLabel}>Current · QTD</div>
+                    <div style={styles.createCloseMetricClusterInner}>
+                      <MetricCard
+                        label="WON QTD"
+                        value={fmtMoneyCompact(createCloseMetrics.wonQTD)}
+                        subValue={
+                          createCloseMetrics.wonQtdOppCount != null
+                            ? fmtInt(createCloseMetrics.wonQtdOppCount)
+                            : null
+                        }
+                        subLabel={createCloseMetrics.wonQtdOppCount != null ? "opps" : null}
+                        onClick={() => openCreateCloseDrill("Won QTD")}
+                        title="Create & Close won QTD (spine) and opportunity count in this slice. Click for drillthrough."
+                      />
+                      <MetricCard
+                        label="Open Pipeline QTD"
+                        value={fmtMoneyCompact(createCloseMetrics.openPipeQTD)}
+                        subValue={
+                          createCloseMetrics.openPipeQtdOppCount != null
+                            ? fmtInt(createCloseMetrics.openPipeQtdOppCount)
+                            : null
+                        }
+                        subLabel={createCloseMetrics.openPipeQtdOppCount != null ? "opps" : null}
+                        onClick={() => openCreateCloseDrill("Open Pipe QTD")}
+                        title="Create & Close open pipeline QTD (spine) and opportunity count in this slice. Click for drillthrough."
+                      />
+                    </div>
+                  </div>
+                  <div style={styles.createCloseMetricCluster}>
+                    <div style={styles.createCloseMetricClusterLabel}>Prior FY · same QTD</div>
+                    <div style={styles.createCloseMetricClusterInner}>
+                      <MetricCard
+                        label="PY QTD Wins"
+                        value={fmtPct1(createCloseYoyCardsUi.wonYoyPct)}
+                        footer={createCloseYoyCardsUi.wonFooter}
+                        onClick={() => openCreateCloseDrill("Won QTD YoY")}
+                        title={createCloseYoyCardsUi.wonTitle}
+                      />
+                      <MetricCard
+                        label="Open pipe YoY"
+                        value={fmtPct1(createCloseYoyCardsUi.openYoyPct)}
+                        footer={createCloseYoyCardsUi.openFooter}
+                        onClick={() => openCreateCloseDrill("Open Pipeline QTD YoY")}
+                        title={createCloseYoyCardsUi.openTitle}
+                      />
+                    </div>
+                  </div>
                 </div>
               </Surface>
             </div>
@@ -6122,6 +6261,7 @@ const productMixDrillRows = useMemo(() => {
         businessLine={businessLine}
         onOpenDefinitions={openDefs}
         yoyPayloadSummary={co.cc_yoy_payload ?? null}
+        yoyDashboardCalc={createCloseYoyCardsUi}
       />
 
       <ProductMixDrillModal
@@ -6423,6 +6563,38 @@ const styles = {
     flexDirection: "column",
   },
   metricGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 },
+  /** Create & Close CEO row: current QTD cluster | wider prior-FY YoY cluster */
+  createCloseCeoMetricsGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(260px, 1fr) minmax(360px, 1.62fr)",
+    gap: 12,
+    alignItems: "stretch",
+  },
+  createCloseMetricCluster: {
+    border: "1px solid rgba(15,23,42,0.11)",
+    borderRadius: 16,
+    background: "rgba(15,23,42,0.035)",
+    padding: "10px 10px 12px",
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  createCloseMetricClusterLabel: {
+    fontSize: 10,
+    fontWeight: 950,
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+    color: "rgba(15,23,42,0.48)",
+    paddingLeft: 2,
+  },
+  createCloseMetricClusterInner: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 10,
+    alignItems: "stretch",
+    minHeight: 0,
+  },
   splitRow: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",

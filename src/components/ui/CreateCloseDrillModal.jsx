@@ -277,6 +277,188 @@ function SourcePill({ value = "ACV" }) {
   );
 }
 
+/** Same tokens as VelocityDrillModal "Velocity formula" block (math section only). */
+const ccYoyEqWrap = {
+  background: "linear-gradient(180deg, rgba(89,193,167,0.12), rgba(89,193,167,0.06))",
+  border: "1px solid rgba(89,193,167,0.28)",
+  borderRadius: 16,
+  padding: 14,
+};
+
+const ccYoyEqTitle = { fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,0.72)", marginBottom: 10 };
+
+const ccYoyEqRow = {
+  display: "flex",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 10,
+  color: "rgba(15,23,42,0.92)",
+};
+
+const ccYoySym = { fontSize: 20, fontWeight: 1000 };
+
+/** Stacked fraction (Velocity drill modal pattern). */
+const ccYoyFrac = {
+  display: "grid",
+  gridTemplateRows: "auto 1px auto",
+  alignItems: "center",
+  justifyItems: "center",
+  padding: "10px 14px",
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.72)",
+  border: "1px solid rgba(15,23,42,0.08)",
+  minWidth: 220,
+};
+
+const ccYoyFracTop = { fontSize: 18, fontWeight: 1000, lineHeight: 1.25, textAlign: "center" };
+const ccYoyFracLine = { width: "100%", height: 1, background: "rgba(15,23,42,0.18)" };
+const ccYoyFracBot = { fontSize: 18, fontWeight: 1000 };
+
+const ccYoyDefsWrap = {
+  marginTop: 10,
+  paddingTop: 10,
+  borderTop: "1px solid rgba(15,23,42,0.10)",
+  display: "grid",
+  gap: 6,
+};
+
+const ccYoyDefsTitle = { fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,0.72)" };
+const ccYoyDefLine = { fontSize: 12, fontWeight: 850, color: "rgba(15,23,42,0.70)" };
+
+const ccYoyMono = {
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  fontSize: 12,
+  fontWeight: 950,
+  color: "rgba(15,23,42,0.82)",
+  background: "rgba(255,255,255,0.72)",
+  border: "1px solid rgba(15,23,42,0.10)",
+  padding: "2px 6px",
+  borderRadius: 8,
+};
+
+const ccYoyResultSpan = { fontSize: 18, fontWeight: 1000 };
+
+function formatCyPyLine(money, opps, fyqLabel) {
+  const m = fmtMoneyCompact(money);
+  const o = toNumber(opps);
+  const oppsPart = o != null && o > 0 ? ` · ${fmtInt(o)} opps` : "";
+  const q = fyqLabel != null && String(fyqLabel).trim() !== "" ? ` · ${String(fyqLabel)}` : "";
+  return `${m}${oppsPart}${q}`;
+}
+
+function CreateCloseYoyFormulaSection({ variant, formula }) {
+  if (!formula || typeof formula !== "object") return null;
+
+  const cy = toNumber(formula.cyAmt);
+  const py = toNumber(formula.pyAmt);
+  const yoyPct = formula.yoyPct;
+
+  const cyLabel = formula.cyFyq != null ? String(formula.cyFyq) : "CY QTD";
+  const pyLabel = formula.pyFyq != null ? String(formula.pyFyq) : "PY QTD";
+
+  const pyZero = py != null && py === 0;
+
+  const subtitle =
+    variant === "won"
+      ? "Closed-won QTD · same quarter vs prior FY"
+      : "Open pipeline QTD · same quarter vs prior FY";
+
+  const cyLine = cy == null ? "—" : formatCyPyLine(cy, formula.cyOpps, cyLabel);
+  const pyLine = py == null ? "—" : formatCyPyLine(py, formula.pyOpps, pyLabel);
+
+  return (
+    <div style={ccYoyEqWrap}>
+      <div style={ccYoyEqTitle}>YoY formula</div>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 850,
+          color: "rgba(15,23,42,0.62)",
+          marginTop: -6,
+          marginBottom: 10,
+        }}
+      >
+        {subtitle}
+      </div>
+
+      <div style={ccYoyEqRow}>
+        <span style={{ ...ccYoySym, fontSize: 18 }}>1)</span>
+        <span style={{ ...ccYoySym, fontSize: 18 }}>CY QTD ACV</span>
+        <span style={ccYoySym}>=</span>
+        <span style={ccYoyResultSpan}>{cyLine}</span>
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      <div style={ccYoyEqRow}>
+        <span style={{ ...ccYoySym, fontSize: 18 }}>2)</span>
+        <span style={{ ...ccYoySym, fontSize: 18 }}>PY same QTD ACV</span>
+        <span style={ccYoySym}>=</span>
+        <span style={ccYoyResultSpan}>{pyLine}</span>
+      </div>
+
+      <div style={{ height: 10 }} />
+
+      {pyZero ? (
+        <div style={{ ...ccYoyDefLine, fontWeight: 900, color: "rgba(15,23,42,0.78)" }}>
+          YoY % is not defined when prior-year same-quarter ACV is $0.
+        </div>
+      ) : (
+        <div style={ccYoyEqRow}>
+          <span style={{ ...ccYoySym, fontSize: 18 }}>3)</span>
+          <span style={{ ...ccYoySym, fontSize: 18 }}>YoY growth %</span>
+          <span style={ccYoySym}>=</span>
+
+          <div style={ccYoyFrac} aria-label="CY minus PY over PY">
+            <div
+              style={{
+                ...ccYoyFracTop,
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "center",
+                columnGap: 6,
+                rowGap: 2,
+              }}
+            >
+              <span>{fmtMoneyCompact(cy)}</span>
+              <span style={{ fontWeight: 1000, color: "rgba(15,23,42,0.45)" }}>−</span>
+              <span>{fmtMoneyCompact(py)}</span>
+            </div>
+            <div style={ccYoyFracLine} />
+            <div style={ccYoyFracBot}>{fmtMoneyCompact(py)}</div>
+          </div>
+
+          <span style={ccYoySym}>=</span>
+          <span style={ccYoyResultSpan}>{fmtPct1(yoyPct)}</span>
+        </div>
+      )}
+
+      <div style={ccYoyDefsWrap}>
+        <div style={ccYoyDefsTitle}>Definitions</div>
+        <div style={ccYoyDefLine}>
+          <span style={ccYoyMono}>YoYGrowthPct</span> = (<span style={ccYoyMono}>CY_QTD_ACV</span> −{" "}
+          <span style={ccYoyMono}>PY_QTD_ACV</span>) / <span style={ccYoyMono}>PY_QTD_ACV</span>
+        </div>
+        <div style={{ ...ccYoyDefLine, marginTop: 6 }}>
+          <strong>CY QTD ACV</strong> matches the CEO dashboard <em>Current · QTD</em> metric cards (same spine
+          roll-up). <strong>PY QTD ACV</strong> comes from the YoY Sigma element (prior fiscal year, same quarter
+          progress).{" "}
+          {variant === "won"
+            ? "The table below is prior-FY closed-won opps that roll up to PY QTD ACV."
+            : "The table below supports the YoY open-pipe comparison for the prior FY quarter."}
+        </div>
+      </div>
+
+      <div style={{ height: 10 }} />
+      <div style={{ color: "rgba(15,23,42,0.62)", fontSize: 12, fontWeight: 850 }}>
+        Notes: CY / PY $ in steps 1–2 match the CEO Create and Close cards and YoY payload; step 3 matches the Prior
+        FY YoY % card.
+      </div>
+    </div>
+  );
+}
+
 export default function CreateCloseDrillModal({
   open,
   onClose,
@@ -296,6 +478,8 @@ export default function CreateCloseDrillModal({
    * YoY context for pills: merged object from useSigmaData (`ccy_yoy_row_json` per row + rollups).
    */
   yoyPayloadSummary = null,
+  /** CEO dashboard YoY math (CY from Current · QTD cards; PY from payload) — `wonDrillFormula` / `openDrillFormula`. */
+  yoyDashboardCalc = null,
 }) {
   const [sortState, setSortState] = useState({
     key: "value",
@@ -313,8 +497,21 @@ export default function CreateCloseDrillModal({
 
   const showCloseBadges = useMemo(() => shouldShowCloseDateBadge(metricName), [metricName]);
 
-  /* Prior-FY C&C drill: no CY vs PY % in the modal for now — ACV + context only. */
   const ptyOnlyWonYoy = useMemo(() => String(metricName ?? "").trim().toLowerCase() === "won qtd yoy", [metricName]);
+
+  const yoyFormulaVariant = useMemo(() => {
+    const m = String(metricName ?? "").trim().toLowerCase();
+    if (m === "won qtd yoy") return "won";
+    if (m === "open pipeline qtd yoy" || m === "open pipelinr qtd yoy") return "open";
+    return null;
+  }, [metricName]);
+
+  const yoyFormulaData = useMemo(() => {
+    if (!yoyDashboardCalc || !yoyFormulaVariant) return null;
+    return yoyFormulaVariant === "won"
+      ? yoyDashboardCalc.wonDrillFormula
+      : yoyDashboardCalc.openDrillFormula;
+  }, [yoyDashboardCalc, yoyFormulaVariant]);
 
   const keys = useMemo(() => {
     return {
@@ -743,6 +940,13 @@ export default function CreateCloseDrillModal({
             </div>
           ) : null}
         </div>
+
+        {yoyFormulaVariant && yoyFormulaData ? (
+          <>
+            <div style={{ height: 4 }} />
+            <CreateCloseYoyFormulaSection variant={yoyFormulaVariant} formula={yoyFormulaData} />
+          </>
+        ) : null}
 
         <div style={styles.columnToggleRow}>
           <button
