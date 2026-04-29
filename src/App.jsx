@@ -118,6 +118,44 @@ function norm(s) {
   return String(s ?? "").trim().toLowerCase();
 }
 
+/** Company Totals: count on the first line, “Closed Won Opps” on the second (Closed QTD + AI Wins). */
+function renderCompanyTotalsClosedWonOppsFooterLines(count) {
+  const sans = {
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-body-size)",
+    letterSpacing: 0.02,
+  };
+  if (count == null || count <= 0) {
+    return (
+      <span
+        style={{
+          ...sans,
+          fontWeight: "var(--salt-type-body-weight)",
+          opacity: 0.78,
+        }}
+      >
+        —
+      </span>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ ...sans, fontWeight: 800, opacity: 0.88, lineHeight: 1.25 }}>{fmtInt(count)}</span>
+      <span style={{ ...sans, fontWeight: "var(--salt-type-body-weight)", opacity: 0.78, lineHeight: 1.25 }}>
+        Closed Won Opps
+      </span>
+    </div>
+  );
+}
+
+/** Bordered band below the headline on Company Totals compact-footer cards; shared minHeight aligns the rule across Budget/Forecast/Closed/AI (grid cards use space-between). */
+const COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE = {
+  borderTop: "1px solid rgba(15,23,42,0.09)",
+  paddingTop: 6,
+  boxSizing: "border-box",
+  minHeight: 52,
+};
+
 function findColIdByName(cols, name) {
   if (!Array.isArray(cols) || !name) return null;
   const target = norm(name);
@@ -1220,7 +1258,7 @@ export default function App() {
   const [keyboardShortcutsHelpOpen, setKeyboardShortcutsHelpOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [aeDrillOpen, setAeDrillOpen] = useState(false);
-  const [aeDrillMetric, setAeDrillMetric] = useState("AEs @ 0 ACV");
+  const [aeDrillMetric, setAeDrillMetric] = useState("AES @ 0 ACV");
   /** Stage 4+ coverage threshold for CEO AE Performance card + drill (3 | 2 | 1 | 0.5). */
   const [aeStage4CovMult, setAeStage4CovMult] = useState(3);
   const [cfoDrillOpen, setCfoDrillOpen] = useState(false);
@@ -2129,8 +2167,23 @@ const croSelectedRollupNode = useMemo(() => {
             padding: 24,
           }}
         >
-          <div style={{ fontWeight: 950, fontSize: 22 }}>Loading SALT Report…</div>
-          <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.92 }}>
+          <div
+            style={{
+              fontFamily: "var(--salt-font-display)",
+              fontSize: "var(--salt-type-title-size)",
+              fontWeight: "var(--salt-type-title-weight)",
+            }}
+          >
+            Loading SALT Report…
+          </div>
+          <div
+            style={{
+              fontFamily: "var(--salt-font-sans)",
+              fontSize: "var(--salt-type-subtitle-size)",
+              fontWeight: "var(--salt-type-subtitle-weight)",
+              opacity: 0.92,
+            }}
+          >
             If this takes longer than expected, press <span style={{ fontWeight: 1000 }}>Cmd/Ctrl + Shift + S</span>
           </div>
         </div>
@@ -2610,6 +2663,16 @@ const companyTotalsDerivedMetrics = useDerivedMetrics({
     (sum, r) => sum + (toNumber(r?.[companyTotalsSpineKeys.closed]) || 0),
     0
   );
+
+  const companyClosedQtdOppCount = useMemo(() => {
+    const key = companyTotalsSpineKeys?.closed;
+    if (!key || !Array.isArray(companyTotalsSpineRows)) return 0;
+    let n = 0;
+    for (const r of companyTotalsSpineRows) {
+      if ((toNumber(r?.[key]) || 0) > 0) n += 1;
+    }
+    return n;
+  }, [companyTotalsSpineRows, companyTotalsSpineKeys.closed]);
 
   const companyStage4Value = useMemo(() => {
     const stageKey =
@@ -3283,15 +3346,19 @@ const createCloseMetrics = useMemo(() => {
     const pyFyq =
       y?.prior_year_fiscal_year_quarter != null ? String(y.prior_year_fiscal_year_quarter) : "PY QTD";
 
+    const pyWonOpps = toNumber(co?.cc_won_pty_qtd_opp_count);
+    const pyOpenOpps = toNumber(co?.cc_open_pty_qtd_opp_count);
+
     const row = (tag, fyq, amt, n) => (
       <div
         key={tag}
         style={{
           display: "flex",
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
           alignItems: "baseline",
-          gap: "0 8px",
-          rowGap: 2,
+          gap: 8,
+          minWidth: 0,
+          whiteSpace: "nowrap",
         }}
       >
         <span style={{ fontWeight: 950, opacity: 0.5, letterSpacing: 0.4 }}>{tag}</span>
@@ -3315,22 +3382,60 @@ const createCloseMetrics = useMemo(() => {
       lineHeight: 1.4,
     };
 
+    /** Current · QTD: opps only; minHeight matches two-row Prior FY footer so dividers line up. */
+    const footerStyleCurrent = {
+      ...footerStyle,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "flex-start",
+      minHeight: 50,
+      boxSizing: "border-box",
+    };
+
     const wonFooter = (
       <div style={footerStyle}>
         {row("CY", cyFyq, cyWon, createCloseMetrics.wonQtdOppCount)}
-        {row("PY", pyFyq, pyWon, toNumber(co?.cc_won_pty_qtd_opp_count) || null)}
+        {row("PY", pyFyq, pyWon, pyWonOpps || null)}
       </div>
     );
 
     const openFooter = (
       <div style={footerStyle}>
         {row("CY", cyFyq, cyOpen, createCloseMetrics.openPipeQtdOppCount)}
-        {row("PY", pyFyq, pyOpen, toNumber(co?.cc_open_pty_qtd_opp_count) || null)}
+        {row("PY", pyFyq, pyOpen, pyOpenOpps || null)}
+      </div>
+    );
+
+    const wonFooterCurrent = (
+      <div style={footerStyleCurrent}>
+        <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.68, lineHeight: 1.4 }}>
+          {createCloseMetrics.wonQtdOppCount != null && createCloseMetrics.wonQtdOppCount > 0
+            ? `${fmtInt(createCloseMetrics.wonQtdOppCount)} opps`
+            : "—"}
+        </span>
+      </div>
+    );
+
+    const openFooterCurrent = (
+      <div style={footerStyleCurrent}>
+        <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.68, lineHeight: 1.4 }}>
+          {createCloseMetrics.openPipeQtdOppCount != null && createCloseMetrics.openPipeQtdOppCount > 0
+            ? `${fmtInt(createCloseMetrics.openPipeQtdOppCount)} opps`
+            : "—"}
+        </span>
       </div>
     );
 
     const a = y?.fiscal_year_quarter != null ? String(y.fiscal_year_quarter) : null;
     const b = y?.prior_year_fiscal_year_quarter != null ? String(y.prior_year_fiscal_year_quarter) : null;
+    const cyQuarterForHeader = a != null && String(a).trim() !== "" ? String(a).trim() : null;
+    const pyQuarterForHeader = b != null && String(b).trim() !== "" ? String(b).trim() : null;
+    const clusterCurrentQtdLabel = cyQuarterForHeader
+      ? `Current · QTD (${cyQuarterForHeader})`
+      : "Current · QTD";
+    const clusterPriorFyLabel = pyQuarterForHeader
+      ? `Prior FY · QTD (${pyQuarterForHeader})`
+      : "Prior FY · QTD";
     const wonTitle =
       a && b
         ? `Closed-won YoY: ${a} vs same progress in ${b} (CY from Current · QTD cards; PY from YoY element). Click for drillthrough.`
@@ -3340,16 +3445,17 @@ const createCloseMetrics = useMemo(() => {
         ? `Open pipe YoY: ${a} vs same progress in ${b} (CY from Current · QTD cards; PY from YoY element). Click for drillthrough.`
         : "Open pipeline YoY vs prior FY same quarter. Click for drillthrough.";
 
-    const pyWonOpps = toNumber(co?.cc_won_pty_qtd_opp_count);
-    const pyOpenOpps = toNumber(co?.cc_open_pty_qtd_opp_count);
-
     return {
       wonYoyPct,
       openYoyPct,
       wonFooter,
       openFooter,
+      wonFooterCurrent,
+      openFooterCurrent,
       wonTitle,
       openTitle,
+      clusterCurrentQtdLabel,
+      clusterPriorFyLabel,
       wonDrillFormula: {
         cyAmt: cyWon,
         pyAmt: pyWon,
@@ -4964,7 +5070,7 @@ const productMixDrillRows = useMemo(() => {
           <>
             <Surface>
               <SurfaceHeader
-                title="COMPANY TOTALS"
+                title="Company Totals"
                 subtitle=""
                 rightNode={
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -4974,15 +5080,29 @@ const productMixDrillRows = useMemo(() => {
                 onInfo={() => openDefs("company_totals")}
               />
               <div style={styles.metricGrid}>
-                <MetricCard 
-                  label="Budget" 
-                  value={fmtMoneyCompact(budgetValue)} 
+                <MetricCard
+                  label="BUDGET"
+                  value={fmtMoneyCompact(budgetValue)}
                   headerRight={<MiniAcvPill />}
-                  subValue="• All Business Lines"
-                  //subLabel="• All Business Lines"
+                  footerCompact
+                  footer={
+                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+                      <span
+                        style={{
+                          fontFamily: "var(--salt-font-sans)",
+                          fontSize: "var(--salt-type-body-size)",
+                          fontWeight: "var(--salt-type-body-weight)",
+                          letterSpacing: 0.02,
+                          opacity: 0.78,
+                        }}
+                      >
+                        All Business Lines
+                      </span>
+                    </div>
+                  }
                 />
                 <MetricCard
-                  label="Forecast"
+                  label="FORECAST"
                   value={fmtMoneyCompact(forecastValue)}
                   onValueClick={() => {
                     setActivePersona("CRO");
@@ -4990,8 +5110,23 @@ const productMixDrillRows = useMemo(() => {
                   }}
                   onClick={undefined}
                   title="Click the number to jump to CRO • Expand for breakdown"
-                  subValue="• All Business Lines"
-                expandRows={[
+                  footerCompact
+                  footer={
+                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+                      <span
+                        style={{
+                          fontFamily: "var(--salt-font-sans)",
+                          fontSize: "var(--salt-type-body-size)",
+                          fontWeight: "var(--salt-type-body-weight)",
+                          letterSpacing: 0.02,
+                          opacity: 0.78,
+                        }}
+                      >
+                        All Business Lines
+                      </span>
+                    </div>
+                  }
+                  expandRows={[
                   {
                     key: "forecast",
                     label: "FORECAST",
@@ -5027,25 +5162,20 @@ const productMixDrillRows = useMemo(() => {
 
                 <MetricCard
                   label="Closed (QTD)"
+                  labelTextTransform="none"
                   value={fmtMoneyCompact(companyClosedQTDValue)}
-                  subValue={
-                    companyClosedVsForecastDelta != null
-                      ? `${companyClosedVsForecastDelta < 0 ? "▼" : "▲"} ${fmtMoneyCompact(Math.abs(companyClosedVsForecastDelta))}`
-                      : null
-                  }
-                  subLabel={
-                    companyClosedVsForecastDelta != null
-                      ? companyClosedVsForecastDelta < 0
-                        ? "behind Forecast"
-                        : "ahead of Forecast"
-                      : null
+                  footerCompact
+                  footer={
+                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+                      {renderCompanyTotalsClosedWonOppsFooterLines(companyClosedQtdOppCount)}
+                    </div>
                   }
                   onClick={openClosedTrendFromMetric}
                   title="Click to expand Closed Trend"
                 />
 
                 <MetricCard
-                  label="Pacing to Forecast"
+                  label="PACING TO FORECAST"
                   value={fmtPct1(companyPacingToForecastValue)}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "Pacing to Forecast" });
@@ -5065,14 +5195,14 @@ const productMixDrillRows = useMemo(() => {
                 />
 
                 <MetricCard
-                  label="Stage 4+ Coverage"
+                  label="STAGE 4+ COVERAGE"
                   value={fmtX(companyStage4Value)}
                   isWip
                   title={STAGE4_COMMIT_DATA_WIP_NOTE}
                 />
 
                 <MetricCard
-                  label="Velocity"
+                  label="VELOCITY"
                   value={fmtPct1(companyVelocityValue)}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "Velocity" });
@@ -5082,7 +5212,7 @@ const productMixDrillRows = useMemo(() => {
                 />
 
                 <MetricCard
-                  label="% Funded"
+                  label="% FUNDED"
                   value={fmtPct1(companyFundedValue)}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "% Funded" });
@@ -5099,7 +5229,7 @@ const productMixDrillRows = useMemo(() => {
 */}
 
                 <MetricCard
-                  label="PG Attainment"
+                  label="PG ATTAINMENT"
                   value={fmtPct1(pgSummary.quarterAttainment)}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "PG Attainment" });
@@ -5109,21 +5239,18 @@ const productMixDrillRows = useMemo(() => {
                 />
 
                 <MetricCard
-                  label="AI WINS"
+                  label="AI Wins"
+                  labelTextTransform="none"
                   value={productMixSummary.aiOppCount}
                   headerRight={<MiniBetaPill />}
-                  subValue={
-                    productMixSummary.oppCount > 0
-                      ? `${productMixSummary.oppCount} total wins`
-                      : null
-                  }
-                  subLabel={
-                    productMixSummary.oppCount > 0
-                      ? "Closed Won opps"
-                      : null
+                  footerCompact
+                  footer={
+                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+                      {renderCompanyTotalsClosedWonOppsFooterLines(productMixSummary.oppCount)}
+                    </div>
                   }
                   onClick={() => {
-                    rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "AI WINS" });
+                    rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "AI Wins" });
                     setProductMixDrillOpen(true);
                   }}
                   title="Click to view AI Wins details (BETA — metric in development)"
@@ -5500,9 +5627,18 @@ const productMixDrillRows = useMemo(() => {
                   }
                   onInfo={() => openDefs("field_execution")}
                 />
-                <div style={styles.metricGrid}>
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                <div style={{ ...styles.metricGrid, ...styles.ceoMetricGridFill }}>
                   <MetricCard
-                    label="Forecast"
+                    label="FORECAST"
                     value={fmtMoneyCompact(scopedFieldExecution.forecast)}
                     onClick={() => {
                       rememberFeedbackAnchor({ section: "Field Execution", metricCard: "Forecast (→ CRO)" });
@@ -5512,13 +5648,13 @@ const productMixDrillRows = useMemo(() => {
                     title="Click to jump to CRO View"
                   />
                   <MetricCard
-                    label="Open Pipeline"
+                    label="OPEN PIPELINE"
                     value={fmtMoneyCompact(scopedFieldExecution.pipe)}
                     onClick={() => openOpenPipelineDrillForRisk("all")}
                     title="Click to view open pipeline detail"
                   />
                   <MetricCard
-                    label="Closed Won"
+                    label="CLOSED WON"
                     value={fmtMoneyCompact(scopedFieldExecution.closedFiltered)}
                     onClick={() => {
                       rememberFeedbackAnchor({ section: "Field Execution", metricCard: "Closed Won" });
@@ -5527,7 +5663,7 @@ const productMixDrillRows = useMemo(() => {
                     title="Click to view closed won detail"
                   />
                   <MetricCard
-                    label="Closed Lost"
+                    label="CLOSED LOST"
                     value={fmtMoneyCompact(scopedFieldExecution.closedLostFiltered)}
                     onClick={() => {
                       if (!scopedFieldExecutionSpineKeys.closedLost) return;
@@ -5551,8 +5687,8 @@ const productMixDrillRows = useMemo(() => {
                     onMouseLeave={() => setFieldExecutionInsightPaused(false)}
                     title={`Open ${currentFieldExecutionInsight.label} pipeline deals`}
                     style={{
-                      marginTop: 12,
-                      width: "99%",
+                      flexShrink: 0,
+                      width: "100%",
                       display: "flex",
                       flexDirection: "column",
                       gap: 4,
@@ -5590,7 +5726,7 @@ const productMixDrillRows = useMemo(() => {
                           minWidth: 0,
                         }}
                       >
-                        Open Pipeline Health
+                        OPEN PIPELINE HEALTH
                       </div>
 
                       <div
@@ -5704,6 +5840,7 @@ const productMixDrillRows = useMemo(() => {
 
                 </div>
               )}
+                </div>
               </Surface>
               </div>
 
@@ -5722,46 +5859,40 @@ const productMixDrillRows = useMemo(() => {
                 />
                 <div style={styles.createCloseCeoMetricsGrid}>
                   <div style={styles.createCloseMetricCluster}>
-                    <div style={styles.createCloseMetricClusterLabel}>Current · QTD</div>
+                    <div style={styles.createCloseMetricClusterLabel}>
+                      {createCloseYoyCardsUi.clusterCurrentQtdLabel}
+                    </div>
                     <div style={styles.createCloseMetricClusterInner}>
                       <MetricCard
-                        label="WON QTD"
+                        label="WON"
                         value={fmtMoneyCompact(createCloseMetrics.wonQTD)}
-                        subValue={
-                          createCloseMetrics.wonQtdOppCount != null
-                            ? fmtInt(createCloseMetrics.wonQtdOppCount)
-                            : null
-                        }
-                        subLabel={createCloseMetrics.wonQtdOppCount != null ? "opps" : null}
+                        footer={createCloseYoyCardsUi.wonFooterCurrent}
                         onClick={() => openCreateCloseDrill("Won QTD")}
-                        title="Create & Close won QTD (spine) and opportunity count in this slice. Click for drillthrough."
+                        title="Create & Close won QTD (spine). Footer: CY shows opp count only; PY matches Prior FY strip. Click for drillthrough."
                       />
                       <MetricCard
-                        label="Open Pipeline QTD"
+                        label="OPEN PIPELINE"
                         value={fmtMoneyCompact(createCloseMetrics.openPipeQTD)}
-                        subValue={
-                          createCloseMetrics.openPipeQtdOppCount != null
-                            ? fmtInt(createCloseMetrics.openPipeQtdOppCount)
-                            : null
-                        }
-                        subLabel={createCloseMetrics.openPipeQtdOppCount != null ? "opps" : null}
+                        footer={createCloseYoyCardsUi.openFooterCurrent}
                         onClick={() => openCreateCloseDrill("Open Pipe QTD")}
-                        title="Create & Close open pipeline QTD (spine) and opportunity count in this slice. Click for drillthrough."
+                        title="Create & Close open pipeline QTD (spine). Footer CY/PY lines match the Prior FY · QTD card (same YoY payload). Click for drillthrough."
                       />
                     </div>
                   </div>
                   <div style={styles.createCloseMetricCluster}>
-                    <div style={styles.createCloseMetricClusterLabel}>Prior FY · same QTD</div>
+                    <div style={styles.createCloseMetricClusterLabel}>
+                      {createCloseYoyCardsUi.clusterPriorFyLabel}
+                    </div>
                     <div style={styles.createCloseMetricClusterInner}>
                       <MetricCard
-                        label="PY QTD Wins"
+                        label="WON"
                         value={fmtPct1(createCloseYoyCardsUi.wonYoyPct)}
                         footer={createCloseYoyCardsUi.wonFooter}
                         onClick={() => openCreateCloseDrill("Won QTD YoY")}
                         title={createCloseYoyCardsUi.wonTitle}
                       />
                       <MetricCard
-                        label="Open pipe YoY"
+                        label="OPEN PIPELINE"
                         value={fmtPct1(createCloseYoyCardsUi.openYoyPct)}
                         footer={createCloseYoyCardsUi.openFooter}
                         onClick={() => openCreateCloseDrill("Open Pipeline QTD YoY")}
@@ -5775,7 +5906,8 @@ const productMixDrillRows = useMemo(() => {
             </div>
             
             <div style={styles.ceoDealsAeTopGrid}>
-                <Surface style={styles.ceoDealsAeTopSurface}>
+                <div style={styles.ceoSplitCol}>
+                <Surface style={{ ...styles.ceoDealsAeTopSurface, ...styles.ceoStretchSurface }}>
                   <SurfaceHeader
                     title="$500K+ Deals"
                     subtitle=""
@@ -5787,22 +5919,22 @@ const productMixDrillRows = useMemo(() => {
                   }
                     onInfo={() => openDefs("deals_500k")}
                   />
-                  <div style={styles.metricGrid}>
+                  <div style={{ ...styles.metricGrid, ...styles.ceoMetricGridFill }}>
                     <MetricCard
-                      label="Won QTD"
+                      label="WON"
                       value={scopedLargeDealsSummary.wonQTD}
                       onClick={() => openLargeDealsDrill("Won QTD")}
                       title="Click to view underlying 500K+ won deals"
                     />
 
                     <MetricCard
-                      label="Open Pipeline QTD"
+                      label="OPEN PIPELINE"
                       value={scopedLargeDealsSummary.openPipeQTD}
                       onClick={() => openLargeDealsDrill("Open Pipeline QTD")}
                       title="Click to view underlying 500K+ open pipeline deals"
                     />
                     <MetricCard
-                      label="Open Pipeline QTD YoY"
+                      label="OPEN PIPELINE YOY"
                       value={fmtPct1(scopedLargeDealsSummary.openPipeQTDYoy)}
                       {...(scopedLargeDealsSummary.openPipeQtdYoyCurrCount != null &&
                       scopedLargeDealsSummary.openPipeQtdYoyPriorCount != null
@@ -5815,7 +5947,7 @@ const productMixDrillRows = useMemo(() => {
                       title="YoY compares counts of $500K+ open deals in this fiscal quarter vs the same fiscal quarter last year (scoped). Drill lists the prior-year same FYQ bucket. “1 vs 0” means one qualifying deal now and none in that prior bucket — not that the same opp must appear in both. Falls back to company % if FYQ cannot be aligned on spine rows."
                     />
                     <MetricCard
-                      label="Prior Year"
+                      label="PY QTD WON"
                       value={scopedLargeDealsSummary.py}
                       onClick={() => openLargeDealsDrill("Prior Year")}
                       title="Click to view prior-year large deals"
@@ -5823,8 +5955,10 @@ const productMixDrillRows = useMemo(() => {
                     />
                   </div>
                 </Surface>
+                </div>
 
-                <Surface style={styles.ceoDealsAeTopSurface}>
+                <div style={styles.ceoSplitCol}>
+                <Surface style={{ ...styles.ceoDealsAeTopSurface, ...styles.ceoStretchSurface }}>
                   <SurfaceHeader
                     title="AE Performance"
                     subtitle=""
@@ -5836,7 +5970,7 @@ const productMixDrillRows = useMemo(() => {
                   }
                     onInfo={() => openDefs("ae_performance")}
                   />
-                  <div style={styles.metricGrid}>
+                  <div style={{ ...styles.metricGrid, ...styles.ceoMetricGridFill }}>
                     <MetricCard
                       label={aeStage4CovMetricTitle(aeStage4CovMult)}
                       headerRight={
@@ -5852,16 +5986,18 @@ const productMixDrillRows = useMemo(() => {
                       )}) to change threshold.`}
                     />
                     <MetricCard
-                      label="AEs @ 0 ACV"
+                      label="AES @ 0 ACV"
                       value={aePerfCounts.zeroAtAcv}
-                      onClick={() => openAeDrill("AEs @ 0 ACV")}
+                      onClick={() => openAeDrill("AES @ 0 ACV")}
                       title="Click to view AEs flagged at 0 ACV"
                     />
                   </div>
                 </Surface>
+                </div>
 
-                <div style={{ minWidth: 0 }}>
+                <div style={styles.ceoSplitCol}>
                   <HorsemanSection
+                    title="Horseman"
                     config={config}
                     horsemanRows={horsemanRowsFromEso}
                     horsemanRowsByCreatedBy={horsemanRowsFromEsoByCreatedBy}
@@ -5873,22 +6009,25 @@ const productMixDrillRows = useMemo(() => {
                     fieldScopeLabel={fieldScopeLabel}
                     fieldScopeIsGlobal={!!fieldScopeBridge?.isGlobal}
                     businessLine={businessLine}
+                    surfaceStyle={{ ...styles.ceoStretchSurface, boxSizing: "border-box" }}
                   />
                 </div>
 
-                <div style={{ minWidth: 0 }}>
-                  <Surface>
+                <div style={styles.ceoSplitCol}>
+                  <Surface style={{ ...styles.ceoStretchSurface, boxSizing: "border-box" }}>
                     <SurfaceHeader
                       title="Hierarchy Roll-ups"
                       subtitle="Employee → +1 → +2 view"
                       onInfo={() => openDefs("cro_revintel_tree")}
                     />
 
-                    <RollupTabs
-                      selectedNode={ceoSelectedRollupNode}
-                      plus1Node={ceoPlus1Node}
-                      plus2Node={ceoPlus2Node}
-                    />
+                    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                      <RollupTabs
+                        selectedNode={ceoSelectedRollupNode}
+                        plus1Node={ceoPlus1Node}
+                        plus2Node={ceoPlus2Node}
+                      />
+                    </div>
                   </Surface>
                 </div>
             </div>
@@ -6267,7 +6406,7 @@ const productMixDrillRows = useMemo(() => {
       <ProductMixDrillModal
         open={productMixDrillOpen}
         onClose={() => setProductMixDrillOpen(false)}
-        title="AI WINS"
+        title="AI Wins"
         rows={productMixDrillRows}
         fieldScopeIsGlobal={!!fieldScopeBridge?.isGlobal}
         fieldScopeLabel={fieldScopeLabel}
@@ -6473,10 +6612,11 @@ const styles = {
   },
 
   headerMetaText: {
-    fontSize: 13.5,
-    fontWeight: 900,
-    letterSpacing: 0.2,
-    color: "rgba(255,255,255,0.98)",
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-subtitle-size)",
+    fontWeight: "var(--salt-type-subtitle-weight)",
+    letterSpacing: 0.02,
+    color: "rgba(255,255,255,0.96)",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -6506,10 +6646,18 @@ const styles = {
     boxShadow: "none",
     userSelect: "none",
   },
-  saltText: { fontSize: 26, fontWeight: 1000, letterSpacing: 0.4 },
+  saltText: {
+    fontFamily: "var(--salt-font-display)",
+    fontSize: "var(--salt-type-title-size)",
+    fontWeight: "var(--salt-type-title-weight)",
+    letterSpacing: "-0.02em",
+  },
   viewPill: {
-    fontSize: 12,
-    fontWeight: 950,
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-eyebrow-size)",
+    fontWeight: "var(--salt-type-eyebrow-weight)",
+    letterSpacing: "var(--salt-type-eyebrow-tracking)",
+    textTransform: "uppercase",
     padding: "6px 10px",
     borderRadius: 999,
     background: "rgba(255,255,255,0.94)",
@@ -6581,19 +6729,22 @@ const styles = {
     gap: 8,
   },
   createCloseMetricClusterLabel: {
-    fontSize: 10,
-    fontWeight: 950,
-    letterSpacing: 0.55,
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-h2-size)",
+    fontWeight: "var(--salt-type-h2-weight)",
+    letterSpacing: "var(--salt-type-eyebrow-tracking)",
     textTransform: "uppercase",
     color: "rgba(15,23,42,0.48)",
     paddingLeft: 2,
   },
   createCloseMetricClusterInner: {
+    flex: 1,
+    minHeight: 0,
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: 10,
     alignItems: "stretch",
-    minHeight: 0,
+    gridAutoRows: "minmax(0, 1fr)",
   },
   splitRow: {
     display: "grid",
@@ -6624,17 +6775,25 @@ const styles = {
     flexDirection: "column",
     height: "100%",
   },
-  /** Top row of $500K+ / AE: column flex only. Do not use height/minHeight % here — it can resolve against the full 2-row grid and overlap Horseman / Hierarchy. */
+  /** Top row of $500K+ / AE: flex column; pair with ceoStretchSurface so metric grids get a definite height and row-fr sizing can equalize card heights. */
   ceoDealsAeTopSurface: {
     display: "flex",
     flexDirection: "column",
     minHeight: 0,
   },
+  /** Metric area under $500K+ / AE: fills Surface below header; implicit rows share height so cards match across the row. */
+  ceoMetricGridFill: {
+    flex: 1,
+    minHeight: 0,
+    alignItems: "stretch",
+    gridAutoRows: "minmax(0, 1fr)",
+  },
   stackCol: { display: "flex", flexDirection: "column", gap: 20 },
   saltTitle: {
-    fontSize: 26,
-    fontWeight: 1000,
-    letterSpacing: 0.8,
+    fontFamily: "var(--salt-font-display)",
+    fontSize: "var(--salt-type-title-size)",
+    fontWeight: "var(--salt-type-title-weight)",
+    letterSpacing: "-0.02em",
     color: "white",
     textShadow: "0 2px 10px rgba(0,0,0,0.20)", // ⬅️ slightly stronger
     userSelect: "none",

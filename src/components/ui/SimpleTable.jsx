@@ -123,7 +123,12 @@ export default function SimpleTable({
 
 const styles = {
   tableWrapper: { width: "100%", borderRadius: "12px", border: "1px solid rgba(15,23,42,0.12)", background: "white", overflow: "hidden" },
-  table: { width: "100%", borderCollapse: "collapse", fontFamily: "system-ui", fontSize: "12px" },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-body-size)",
+  },
   headerRow: { background: "#334155" },
   th: { textAlign: "left", padding: "14px 10px", fontWeight: 950, color: "#ffffff", cursor: "pointer", whiteSpace: "nowrap" },
   td: { padding: "12px 10px", borderBottom: "1px solid rgba(15,23,42,0.06)", color: "rgba(15,23,42,0.80)", fontWeight: 850, whiteSpace: "nowrap" },

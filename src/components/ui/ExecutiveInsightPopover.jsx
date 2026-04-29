@@ -1,6 +1,46 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+/** Uppercase label row — matches `MetricCard` eyebrow. */
+const metricCardEyebrowStyle = {
+  fontFamily: "var(--salt-font-sans)",
+  fontSize: "var(--salt-type-eyebrow-size)",
+  fontWeight: 700,
+  letterSpacing: "var(--salt-type-eyebrow-tracking)",
+  opacity: 0.88,
+  textTransform: "uppercase",
+  lineHeight: 1.25,
+  overflowWrap: "break-word",
+  wordBreak: "break-word",
+};
+
+/** Primary value line — popover headline / expanded copy. */
+const metricCardValueStyle = {
+  fontFamily: "var(--salt-font-display)",
+  fontSize: "var(--salt-type-number-size)",
+  fontWeight: "var(--salt-type-number-weight)",
+  color: "rgba(15, 23, 42, 0.92)",
+  lineHeight: 1.2,
+  minWidth: 0,
+  overflowWrap: "break-word",
+  wordBreak: "break-word",
+};
+
+/** Grid card teaser only: one line + ellipsis so narrow columns do not wrap and resize the row. */
+const insightCardTeaserStyle = {
+  fontFamily: "var(--salt-font-display)",
+  fontSize: "var(--salt-type-insight-teaser-size)",
+  fontWeight: "var(--salt-type-number-weight)",
+  color: "rgba(15, 23, 42, 0.92)",
+  lineHeight: 1.2,
+  minWidth: 0,
+  width: "100%",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  minHeight: "1.2em",
+};
+
 export default function ExecutiveInsightPopover({
   headline,
   supporting = [],
@@ -170,13 +210,15 @@ export default function ExecutiveInsightPopover({
         border: "1px solid rgba(37,99,235,0.14)",
         background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.96))",
         borderRadius: 14,
-        padding: "12px 14px",
-        minHeight: 108,
+        padding: 14,
+        boxSizing: "border-box",
         width: "100%",
+        flex: "1 1 auto",
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-start",
-        justifyContent: "space-between",
+        justifyContent: "flex-start",
         gap: 8,
         cursor: "pointer",
         boxShadow: isOpen
@@ -233,17 +275,7 @@ export default function ExecutiveInsightPopover({
                 marginBottom: 10,
             }}
             >
-            <div
-                style={{
-                fontSize: 13,
-                fontWeight: 1000,
-                letterSpacing: 0.5,
-                textTransform: "uppercase",
-                color: "rgba(15,23,42,0.62)",
-                }}
-            >
-                {label}
-            </div>
+            <div style={metricCardEyebrowStyle}>{label}</div>
 
             <div
                 style={{
@@ -352,16 +384,7 @@ export default function ExecutiveInsightPopover({
             </div>
             </div>
 
-            <div
-              style={{
-                fontSize: 16,
-                lineHeight: 1.4,
-                fontWeight: 900,
-                color: "rgba(15,23,42,0.92)",
-              }}
-            >
-              {headline}
-            </div>
+            <div style={{ ...metricCardValueStyle, lineHeight: 1.35 }}>{headline}</div>
 
             {!!supporting.length && (
               <div
@@ -489,8 +512,12 @@ export default function ExecutiveInsightPopover({
         <div
         ref={wrapRef}
         style={{
-            display: cardMode ? "block" : "inline-block",
-            width: cardMode ? "100%" : "auto",
+          display: cardMode ? "flex" : "inline-block",
+          flexDirection: cardMode ? "column" : undefined,
+          width: cardMode ? "100%" : "auto",
+          alignSelf: cardMode ? "stretch" : undefined,
+          minHeight: cardMode ? "100%" : undefined,
+          height: cardMode ? "100%" : undefined,
         }}
         onMouseEnter={() => {
             openSoon();
@@ -527,79 +554,75 @@ export default function ExecutiveInsightPopover({
               >
                 <div style={sparkleStyle}>✦</div>
 
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 1000,
-                    letterSpacing: 0.7,
-                    textTransform: "uppercase",
-                    color: "rgba(15,23,42,0.55)",
-                  }}
-                >
-                  Executive Insight
-                </div>
+                <div style={metricCardEyebrowStyle}>{label}</div>
               </div>
 
                 <div
-                key={teaser}
-                style={{
-                    fontSize: 18,
-                    fontWeight: 900,
-                    lineHeight: 1.2,
-                    color: "rgba(15,23,42,0.92)",
+                  key={teaser}
+                  title={teaser}
+                  style={{
+                    ...insightCardTeaserStyle,
                     opacity: isOpen ? 1 : 0.95,
                     transition: "opacity 300ms ease",
                     animation: "fadeSlideIn 240ms ease",
-                }}
+                  }}
                 >
-                {teaser}
+                  {teaser}
                 </div>
 
               <div
-                    style={{
-                        fontSize: 12,
-                        fontWeight: 900,
-                        color: "rgba(15,23,42,0.58)",
-                    }}
-                    >
-                    View insight →
-                    </div>
-
-                    <div
-                    style={{
-                        width: "100%",
-                        height: 4,
-                        borderRadius: 999,
-                        background: "rgba(15,23,42,0.06)",
-                        overflow: "hidden",
-                        marginTop: 2,
-                    }}
-                    >
-                    <div
-                        style={{
-                        height: "100%",
-                        width: `${Math.max(0, Math.min(1, progress)) * 100}%`,
-                        borderRadius: 999,
-                        background: "linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)",
-                        transition: isOpen || isPinned ? "none" : "width 40ms linear",
-                        }}
-                    />
+                style={{
+                  marginTop: "auto",
+                  width: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "var(--salt-font-sans)",
+                    fontSize: "var(--salt-type-body-size)",
+                    fontWeight: "var(--salt-type-body-weight)",
+                    color: "var(--salt-text-muted)",
+                  }}
+                >
+                  View insight →
                 </div>
+
+                <div
+                  style={{
+                    width: "100%",
+                    height: 4,
+                    borderRadius: 999,
+                    background: "rgba(15,23,42,0.06)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.max(0, Math.min(1, progress)) * 100}%`,
+                      borderRadius: 999,
+                      background: "linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)",
+                      transition: isOpen || isPinned ? "none" : "width 40ms linear",
+                    }}
+                  />
+                </div>
+              </div>
             </>
           ) : (
             <>
               <div style={sparkleStyle}>✦</div>
               <span
                 style={{
-                  fontSize: 12,
-                  fontWeight: 950,
-                  color: "rgba(15,23,42,0.86)",
+                  ...metricCardEyebrowStyle,
                   whiteSpace: "nowrap",
                   animation: "executiveSparklePulse 2.6s ease-in-out infinite",
                   transform: "translateZ(0)",
                 }}
               >
-                Executive Insight
+                {label}
               </span>
             </>
           )}

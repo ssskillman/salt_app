@@ -21,7 +21,7 @@ export function formatAeStage4CovMult(mult) {
 }
 
 export function aeStage4CovMetricTitle(mult) {
-  return `AEs > ${formatAeStage4CovMult(mult)} Stage 4+ Cov`;
+  return `AES > ${formatAeStage4CovMult(mult).toUpperCase()} STAGE 4+ COV`;
 }
 
 export function isAeStage4CovDrillMetric(metricName) {

@@ -16,6 +16,8 @@ export default function RollupTabs({ selectedNode, plus1Node, plus2Node }) {
   return (
     <div
       style={{
+        flex: 1,
+        minHeight: 0,
         padding: "8px 4px 2px",
         fontSize: 12,
         fontWeight: 850,
@@ -30,14 +32,19 @@ export default function RollupTabs({ selectedNode, plus1Node, plus2Node }) {
   return (
     <div
       style={{
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
         borderRadius: 16,
         background: "rgba(255,255,255,0.65)",
         border: "1px solid rgba(15,23,42,0.10)",
         padding: 10,
+        boxSizing: "border-box",
       }}
     >
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", flexShrink: 0 }}>
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -57,11 +64,13 @@ export default function RollupTabs({ selectedNode, plus1Node, plus2Node }) {
       </div>
 
       {/* Content */}
-      {active?.node ? (
-        <RollupCard label={active.label} node={active.node} />
-      ) : (
-        <div style={{ fontSize: 12, opacity: 0.6 }}>No data</div>
-      )}
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "auto" }}>
+        {active?.node ? (
+          <RollupCard label={active.label} node={active.node} />
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.6 }}>No data</div>
+        )}
+      </div>
     </div>
   );
 }

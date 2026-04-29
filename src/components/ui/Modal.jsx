@@ -82,7 +82,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    fontFamily: "system-ui",
+    fontFamily: "var(--salt-font-sans)",
   },
   header: {
     padding: 16,
@@ -91,8 +91,19 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
-  title: { fontSize: 18, fontWeight: 900, color: "#0f172a" },
-  subtitle: { fontSize: 13, color: "#64748b", marginTop: 4, fontWeight: 600 },
+  title: {
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-h1-size)",
+    fontWeight: "var(--salt-type-h1-weight)",
+    color: "#0f172a",
+  },
+  subtitle: {
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-subtitle-size)",
+    fontWeight: "var(--salt-type-subtitle-weight)",
+    color: "#64748b",
+    marginTop: 4,
+  },
   closeBtn: {
     appearance: "none",
     border: "1px solid #ddd",

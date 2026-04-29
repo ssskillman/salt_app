@@ -9,7 +9,7 @@ export const VIEW_SUMMARIES = {
   view_ceo: {
     title: "CEO View",
     body:
-      "Snapshot of company performance vs quarterly forecast, pipeline quality, field execution, large-deal concentration, and AI-win attachment (beta). Definitions cover every metric card plus drill-downs opened from the CEO surface.",
+      "Snapshot of company performance vs quarterly forecast, pipeline quality, field execution, large-deal concentration, and AI-win attachment (beta). Definitions cover every metric card plus drill-downs opened from the CEO surface (including Create & Close YoY and in-modal formula help where present).",
     bullets: [
       "Are we on track to hit forecast?",
       "Where are the biggest risks?",
@@ -89,24 +89,24 @@ export const VIEW_SUMMARIES = {
  */
 export const DEFINITIONS = {
   company_totals: {
-    title: "COMPANY TOTALS",
+    title: "Company Totals",
     summary:
       "Global company rollup for the selected fiscal quarter and business line (unless noted). Use this row to judge pacing vs plan, pipeline sufficiency, and a few forward-looking execution signals.\n\nACV (Annual Contract Value) is the common currency for booked and forecasted revenue in this row.",
     metrics: [
       {
-        term: "Budget (ACV)",
+        term: "BUDGET (ACV)",
         def: "The quarterly bookings plan / budget for all business lines (shown with an ACV chip).\nWhy it matters: Anchors “how much we planned to book” vs forecast and closed performance.",
       },
       {
-        term: "Forecast",
+        term: "FORECAST",
         def: "Expected Closed Won ACV for the quarter (company-level). Expand the card to compare Forecast, Quota, Commit, Best Case, and Open Pipeline in one place.\nWhy it matters: This is the operating number execs manage to; clicking the value jumps to CRO territory context when configured.",
       },
       {
         term: "Closed (QTD)",
-        def: "Closed Won ACV booked quarter-to-date.\nWhy it matters: Shows realized bookings vs the forecast line; the subtext compares closed $ to forecast (ahead / behind). Click opens the Closed Trend view.",
+        def: "Closed Won ACV booked quarter-to-date for the selected business line on the company opportunity spine.\nThe card footer shows how many opportunities in that slice have positive closed ACV in the column: the count on the first line and “Closed Won Opps” on the second.\nWhy it matters: Realized bookings for the quarter; click opens the Closed Trend view.",
       },
       {
-        term: "Pacing to Forecast",
+        term: "PACING TO FORECAST",
         def: "Closed Won (QTD) ÷ Forecast, expressed as a percent.\nWhy it matters: Simple read on whether the quarter is on track. Rule of thumb: well under 50% late in the quarter usually signals risk.",
       },
       {
@@ -114,24 +114,24 @@ export const DEFINITIONS = {
         def: "Compound annual growth rate of trailing-twelve-month ACV over a two-year window (inputs and formula are available in the CAGR drill).\nWhy it matters: Smooths quarter noise and shows whether underlying booking power is growing.",
       },
       {
-        term: "Stage 4+ Coverage",
+        term: "STAGE 4+ COVERAGE",
         def: "Late-stage qualified pipeline (Stage 4 and above) expressed as a multiple of quarterly forecast.\nWhy it matters: Indicates whether enough qualified deals exist to close the gap to plan. Very low multiples (<~1.5×) often precede forecast risk; ~2–3× is a common healthy band (org-dependent).",
       },
       {
-        term: "Velocity",
+        term: "VELOCITY",
         def: "Conversion-style signal: how efficiently pipeline is turning into Closed Won in the measured window (see Velocity drill for inputs).\nWhy it matters: Falling velocity with flat pipeline can mean slippage, stage hygiene issues, or competitive losses.",
       },
       {
-        term: "% Funded",
+        term: "% FUNDED",
         def: "Share of weighted forecast represented by deals in strong forecast categories (see % Funded drill for the exact rule used in your workbook).\nWhy it matters: Higher funded mix usually means less reliance on long-shot upside to make the number.",
       },
       {
-        term: "PG Attainment",
+        term: "PG ATTAINMENT",
         def: "Pipeline generation attainment vs the quarterly PG goal (quarter-to-date).\nWhy it matters: Shows whether the top of funnel is producing enough new pipe to support future quarters; click opens the PG pacing drill.",
       },
       {
-        term: "AI WINS (BETA)",
-        def: "Count of Closed Won opportunities in the current filters that include at least one AI-attached product line (heuristic on product name / code — beta, subject to refinement).\nThe subtitle shows total Closed Won wins in the same slice for context.\nWhy it matters: Fast read on how often AI SKUs show up on winning deals; click opens the product mix drill-down.",
+        term: "AI Wins (BETA)",
+        def: "Count of Closed Won opportunities in the current filters that include at least one AI-attached product line (heuristic on product name / code — beta, subject to refinement).\nThe card footer matches Closed (QTD): total Closed Won opportunity count in the same slice on the first line and “Closed Won Opps” on the second.\nWhy it matters: Fast read on how often AI SKUs show up on winning deals; click opens the product mix drill-down.",
       },
       {
         term: "Executive Insight",
@@ -146,23 +146,23 @@ export const DEFINITIONS = {
       "Employee-scoped slice of the business for the same fiscal quarter and business line as Company Totals. Metrics follow the Field Scope selector (Global, team under a node, or an individual).",
     metrics: [
       {
-        term: "Forecast",
+        term: "FORECAST",
         def: "Forecasted Closed Won ACV for the selected scope.\nWhy it matters: Shows what that part of the org is expected to produce; click can jump to CRO territory detail when enabled.",
       },
       {
-        term: "Open Pipeline",
+        term: "OPEN PIPELINE",
         def: "Open pipeline ACV remaining in the quarter for the selected scope.\nWhy it matters: Future closable capacity for that slice; click opens open-pipeline drill.",
       },
       {
-        term: "Closed Won",
+        term: "CLOSED WON",
         def: "Closed Won ACV in-period for the selected scope (same employee-scoped spine as other Field Execution cards).\nWhy it matters: Win execution for the scoped team or rep; click opens closed-won drill.",
       },
       {
-        term: "Closed Lost",
+        term: "CLOSED LOST",
         def: "Closed Lost ACV in-period for the selected scope.\nWhy it matters: Surfaces value lost from the funnel in the quarter; drill is available when the Closed Lost ACV column is mapped in config.",
       },
       {
-        term: "Open Pipeline Health",
+        term: "OPEN PIPELINE HEALTH",
         def: "Summary strip under the four cards that highlights a risk segment of open pipeline (e.g. concentration in a stage or age band). Count and dollars are scoped; click opens the matching open-pipeline drill.\nWhy it matters: Converts a large Open Pipeline number into an actionable “where to look first” signal.",
       },
     ],
@@ -194,20 +194,20 @@ export const DEFINITIONS = {
       "Concentration view for opportunities at or above the large-deal threshold in the current fiscal quarter and filters. Helps answer how dependent the quarter is on whale deals.",
     metrics: [
       {
-        term: "Won QTD",
-        def: "Closed Won ACV for $500K+ opportunities closed quarter-to-date (scoped).\nWhy it matters: Shows large-deal contribution to the quarter’s booked number.",
+        term: "WON",
+        def: "Closed Won ACV for $500K+ opportunities closed quarter-to-date (scoped). Card title is shortened; the section is quarter-to-date.\nWhy it matters: Shows large-deal contribution to the quarter’s booked number.",
       },
       {
-        term: "Open Pipeline QTD",
-        def: "Open pipeline ACV for $500K+ opportunities still open in the quarter (scoped).\nWhy it matters: Future dependency on big deals to close the gap to plan.",
+        term: "OPEN PIPELINE",
+        def: "Open pipeline ACV for $500K+ opportunities still open in the quarter (scoped). Card title is shortened; the section is quarter-to-date.\nWhy it matters: Future dependency on big deals to close the gap to plan.",
       },
       {
-        term: "Open Pipeline QTD YoY",
-        def: "Year-over-year percent change in the count (or configured comparison) of $500K+ open deals in this fiscal quarter vs the same fiscal quarter last year.\nWhy it matters: Shows whether the large-deal open funnel is building or eroding YoY. Subtitles may show “this FYQ vs same FYQ last year” counts from the drill.",
+        term: "OPEN PIPELINE YOY",
+        def: "Year-over-year change on $500K+ in-quarter open pipeline (definition follows your Sigma / client rollup mapping—often ACV YoY %, sometimes with open deal counts in the subtitle when the spine exposes current vs prior FYQ rows).\nWhy it matters: Shows whether the large-deal open funnel is building or eroding YoY.",
       },
       {
-        term: "Prior Year",
-        def: "Reference to prior-year large-deal performance or inventory for the same comparison window (see drill for row-level detail).\nWhy it matters: Puts current large-deal results in last-year context.",
+        term: "PY QTD WON",
+        def: "Prior-year quarter large-deal reference for the same comparison window as the other $500K+ cards (see drill for row-level detail).\nWhy it matters: Puts current large-deal results in last-year context.",
       },
     ],
   },
@@ -215,23 +215,23 @@ export const DEFINITIONS = {
   create_close: {
     title: "CREATE & CLOSE",
     summary:
-      "In-quarter throughput: deals created in the fiscal quarter and either already won or still open. Isolates “fresh” pipeline and closes from carry-in.",
+      "In-quarter throughput: opportunities created in the prompt fiscal quarter and either already Closed Won or still open (create-and-close), rolled from the employee-scoped opportunity spine when mapped. The Current · QTD cluster is prompt-quarter won dollars and open dollars; the Prior FY · QTD cluster shows YoY growth % on ACV versus the prior fiscal year’s matching quarter (FY labels appear in the cluster headers when the YoY payload includes them).",
     metrics: [
       {
-        term: "WON QTD",
-        def: "Closed Won ACV for opportunities created in the same fiscal quarter and closed in that quarter (in-quarter create-and-close).\nWhy it matters: Shows velocity of brand-new opportunities that did not rely on starting pipeline.",
+        term: "WON",
+        def: "Current · QTD cluster: Closed Won ACV for in-quarter create-and-close opportunities (same spine roll-up). Footer shows QTD opportunity count only (headline is $); footer band height matches Prior FY · QTD cards so dividers line up.\nWhy it matters: Velocity of brand-new opportunities that did not rely on starting pipeline.",
       },
       {
-        term: "Open Pipeline QTD",
-        def: "Open ACV for opportunities created in-quarter that remain open.\nWhy it matters: Remaining in-quarter upside that was sourced this quarter.",
+        term: "OPEN PIPELINE",
+        def: "Current · QTD cluster: open ACV for in-quarter create-and-close opportunities (same spine roll-up). Footer shows QTD opportunity count only; footer band height matches Prior FY · QTD cards so dividers line up.\nWhy it matters: Remaining in-quarter upside sourced this quarter.",
       },
       {
-        term: "PY QTD Wins",
-        def: "Prior-year same-quarter create-and-close closed won: total ACV (primary) and opportunity count (subtext), for the fiscal quarter that matches your prompt. Open the drill for the underlying opportunities. YoY % will return in a later release.",
+        term: "PRIOR FY · WON",
+        def: "Prior FY · QTD cluster: card title is WON (YoY % headline). The YoY % is (CY won $ − PY won $) ÷ PY won $ on ACV: CY matches the Current · QTD WON headline; PY comes from the YoY Sigma element for the aligned prior-FY quarter. Footer lines show CY vs PY dollars and opps on one line each. Click for the prior-FY won drill plus an inline YoY formula that walks through the same inputs.",
       },
       {
-        term: "Open Pipeline QTD YoY",
-        def: "Year-over-year change in in-quarter created-and-still-open pipeline.\nWhy it matters: Shows whether the org is generating more or less fresh open pipe YoY (may be WIP).",
+        term: "PRIOR FY · OPEN PIPELINE",
+        def: "Prior FY · QTD cluster: card title is OPEN PIPELINE (YoY % headline). The YoY % is (CY open $ − PY open $) ÷ PY open $ on ACV: CY matches the Current · QTD OPEN PIPELINE headline; PY comes from the YoY element. Footer: CY vs PY dollars and opps on one line each. Click for the YoY drill and the same style of YoY formula block.",
       },
     ],
   },
@@ -242,20 +242,20 @@ export const DEFINITIONS = {
       "Simple AE coverage flags for the scoped dataset: who is far above a Stage 4 coverage threshold and who has not booked ACV.",
     metrics: [
       {
-        term: "AEs > 3x Stage 4 Cov",
-        def: "Count of AEs whose Stage 4+ pipeline coverage exceeds three times the configured coverage threshold.\nWhy it matters: Highlights reps sitting on unusually deep late-stage inventory (quality and timing still need human review).",
+        term: "AES > 3X STAGE 4+ COV",
+        def: "Count of AEs whose Stage 4+ pipeline coverage exceeds the configured coverage threshold (slider: .5x–3x).\nWhy it matters: Highlights reps sitting on unusually deep late-stage inventory (quality and timing still need human review).",
       },
       {
-        term: "AEs @ 0 ACV",
+        term: "AES @ 0 ACV",
         def: "Count of AEs with zero Closed Won ACV in the selected window and filters.\nWhy it matters: Surfaces execution gaps or ramping pockets that may need manager attention.",
       },
     ],
   },
 
   horseman: {
-    title: "HORSEMAN",
+    title: "Horseman",
     summary:
-      "Horizontal stacked bars that split ARR (or configured value) by outcome bucket—Closed Won, Closed Lost, and Open Pipeline—across either Opportunity Source or Opportunity Created By (Axis toggle when the extra column is mapped or when the spine supplies Created By). Use Active segments to include or exclude outcome slices in the bar totals.",
+      "Horizontal stacked bars that split ARR (or configured value) by outcome bucket—Closed Won, Closed Lost, and Open Pipeline—across either Opportunity Source or Opportunity Created By (Axis toggle when the extra column is mapped or when the spine supplies Created By). Use Active segments to include or exclude outcome slices in the bar totals. Drill: row-level opportunities for the clicked segment; when a JSON payload column is mapped on the detail source, the app merges compact per-row fields (limits wide Sigma URLs) and the ACV column prefers ACV change from that payload when present. Basis is hidden for won/lost/open reads from the payload.",
     metrics: [
       {
         term: "Axis: Source vs Created by",
@@ -305,9 +305,9 @@ export const DEFINITIONS = {
   },
 
   product_mix: {
-    title: "AI WINS — PRODUCT MIX (DRILL)",
+    title: "AI Wins — product mix (drill)",
     summary:
-      "Modal opened from AI WINS (BETA). Lists Closed Won opportunities with line-item detail from orders / CPQ. Use it to see which SKUs—including AI products—sit under each win.",
+      "Modal opened from AI Wins (BETA). Lists Closed Won opportunities with line-item detail from orders / CPQ. Use it to see which SKUs—including AI products—sit under each win.",
     metrics: [
       {
         term: "Line-item $ (sum)",

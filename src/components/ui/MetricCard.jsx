@@ -94,6 +94,8 @@ export default function MetricCard({
   label,
   value,
   title,
+  /** Eyebrow label casing; default matches existing all-caps metric labels. */
+  labelTextTransform = "uppercase",
 
   // existing behavior
   onClick,
@@ -111,6 +113,11 @@ export default function MetricCard({
   headerRight = null,
   /** Extra controls (e.g. slider); clicks do not trigger card drill. */
   footer = null,
+  /**
+   * When true, footer still renders but the value block keeps the same vertical rhythm as cards
+   * that use subValue (no flex-fill / hero min-height). Use for single-line footers under the headline.
+   */
+  footerCompact = false,
   isWip = false,
 }) {
   const [hover, setHover] = useState(false);
@@ -118,6 +125,7 @@ export default function MetricCard({
   const [chevHover, setChevHover] = useState(false);
 
   const hasExpand = Array.isArray(expandRows) && expandRows.length > 0;
+  const footerHeroLayout = Boolean(footer) && !footerCompact;
 
   // Drillable means: card click OR value click OR expand breakdown
   const hasDrill =
@@ -160,6 +168,8 @@ export default function MetricCard({
       userSelect: "none",
       outline: "none",
       minHeight: 72,
+      height: "100%",
+      boxSizing: "border-box",
       display: "flex",
       flexDirection: "column",
       justifyContent: "space-between",
@@ -329,7 +339,7 @@ export default function MetricCard({
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "space-between",
             gap: 8,
             minWidth: 0,
@@ -337,16 +347,17 @@ export default function MetricCard({
         >
           <div
             style={{
-              fontSize: 11,
-              fontWeight: 950,
-              letterSpacing: 0.6,
-              opacity: 0.65,
-              textTransform: "uppercase",
+              fontFamily: "var(--salt-font-sans)",
+              fontSize: "var(--salt-type-eyebrow-size)",
+              fontWeight: 700,
+              letterSpacing: "var(--salt-type-eyebrow-tracking)",
+              opacity: 0.88,
+              textTransform: labelTextTransform,
               flex: 1,
               minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              lineHeight: 1.25,
+              overflowWrap: "break-word",
+              wordBreak: "break-word",
             }}
           >
             {label}
@@ -355,9 +366,24 @@ export default function MetricCard({
           {headerRight}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+            flex: footerHeroLayout ? 1 : undefined,
+            minHeight: footerHeroLayout ? 0 : undefined,
+            justifyContent: footerHeroLayout ? "flex-end" : undefined,
+          }}
+        >
           <div
-            style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}
+            style={{
+              display: "flex",
+              alignItems: footerHeroLayout ? "flex-end" : "baseline",
+              justifyContent: "space-between",
+              gap: 10,
+              minHeight: footerHeroLayout ? "clamp(2.5rem, 5.2vw, 3.6rem)" : undefined,
+            }}
           >
             <AnimatedMetricValue
               value={value}
@@ -370,10 +396,11 @@ export default function MetricCard({
           {subValue != null && (
             <div
               style={{
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: 0.2,
-                opacity: 0.75,
+                fontFamily: "var(--salt-font-sans)",
+                fontSize: "var(--salt-type-body-size)",
+                fontWeight: "var(--salt-type-body-weight)",
+                letterSpacing: 0.02,
+                opacity: 0.78,
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
@@ -392,7 +419,7 @@ export default function MetricCard({
             onClick={stopFooterBubble}
             onMouseDown={stopFooterBubble}
             onKeyDown={stopFooterBubble}
-            style={{ marginTop: 8, minWidth: 0 }}
+            style={{ marginTop: footerCompact ? 2 : 8, minWidth: 0 }}
           >
             {footer}
           </div>
@@ -414,11 +441,26 @@ export default function MetricCard({
                       gap: 10,
                     }}
                   >
-                    <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.7, letterSpacing: 0.3 }}>
+                    <div
+                      style={{
+                        fontFamily: "var(--salt-font-sans)",
+                        fontSize: "var(--salt-type-h2-size)",
+                        fontWeight: "var(--salt-type-h2-weight)",
+                        opacity: 0.72,
+                        letterSpacing: 0.04,
+                      }}
+                    >
                       {r?.label}
                     </div>
 
-                    <div style={{ fontSize: 12, fontWeight: 950, color: "rgba(15, 23, 42, 0.88)" }}>
+                    <div
+                      style={{
+                        fontFamily: "var(--salt-font-display)",
+                        fontSize: "var(--salt-type-body-size)",
+                        fontWeight: "var(--salt-type-number-weight)",
+                        color: "rgba(15, 23, 42, 0.88)",
+                      }}
+                    >
                       {r?.value ?? "—"}
                     </div>
                   </div>

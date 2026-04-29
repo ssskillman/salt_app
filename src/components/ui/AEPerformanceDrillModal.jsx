@@ -480,7 +480,7 @@ const styles = {
     flexDirection: "column",
     overflow: "hidden",
     boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-    fontFamily: "system-ui",
+    fontFamily: "var(--salt-font-sans)",
   },
   header: {
     padding: "16px 24px",
@@ -490,8 +490,19 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: { fontSize: 18, fontWeight: 1000, letterSpacing: "0.5px" },
-  subtitle: { fontSize: 12, opacity: 0.82, fontWeight: 750, marginTop: 2 },
+  title: {
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-h1-size)",
+    fontWeight: "var(--salt-type-h1-weight)",
+    letterSpacing: "0.02em",
+  },
+  subtitle: {
+    fontFamily: "var(--salt-font-sans)",
+    fontSize: "var(--salt-type-subtitle-size)",
+    fontWeight: "var(--salt-type-subtitle-weight)",
+    opacity: 0.88,
+    marginTop: 2,
+  },
   closeBtn: {
     background: "none",
     border: "none",

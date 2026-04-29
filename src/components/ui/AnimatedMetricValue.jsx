@@ -214,8 +214,9 @@ export default function AnimatedMetricValue({
       onClick={onClick}
       title={clickable ? "Click to navigate" : undefined}
       style={{
-        fontSize: 22,
-        fontWeight: 1000,
+        fontFamily: "var(--salt-font-display)",
+        fontSize: "var(--salt-type-number-size)",
+        fontWeight: "var(--salt-type-number-weight)",
         color: "rgba(15, 23, 42, 0.92)",
         cursor: clickable ? "pointer" : "inherit",
         textDecoration: active && clickable ? "underline" : "none",

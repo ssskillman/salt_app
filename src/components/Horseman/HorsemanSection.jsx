@@ -158,7 +158,7 @@ export default function HorsemanSection({
   height = 280,
   wrapInSurface = true,
   surfaceStyle = null,
-  title = "HORSEMAN",
+  title = "Horseman",
   fieldScopeLabel = "Global",
   fieldScopeIsGlobal = true,
   fieldScopeUserCount = 0,
@@ -652,5 +652,27 @@ const modalFieldKeys = useMemo(() => {
 
   if (!wrapInSurface) return inner;
 
-  return <Surface style={surfaceStyle || undefined}>{inner}</Surface>;
+  return (
+    <Surface
+      style={{
+        boxSizing: "border-box",
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+        ...surfaceStyle,
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {inner}
+      </div>
+    </Surface>
+  );
 }

@@ -14,16 +14,23 @@ export function SurfaceHeader({ title, subtitle, rightNode = null, onInfo = null
     >
       <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
         <div
-          style={{ fontSize: 16, fontWeight: 950, letterSpacing: 0.2, color: "var(--salt-text-strong)" }}
+          style={{
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-h1-size)",
+            fontWeight: "var(--salt-type-h1-weight)",
+            letterSpacing: 0.02,
+            color: "var(--salt-text-strong)",
+          }}
         >
           {title}
         </div>
         {subtitle && (
           <div
             style={{
-              fontSize: 12,
-              fontWeight: 900,
-              opacity: 0.85,
+              fontFamily: "var(--salt-font-sans)",
+              fontSize: "var(--salt-type-subtitle-size)",
+              fontWeight: "var(--salt-type-subtitle-weight)",
+              lineHeight: 1.45,
               color: "var(--salt-text-muted)",
             }}
           >

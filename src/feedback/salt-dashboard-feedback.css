@@ -18,7 +18,7 @@
   --it-neutral-5: #f4f1ed;
   --it-neutral-6: #fffaf6;
   --it-neutral-7: #f9f5f1;
-  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-display: var(--salt-font-display, "Spectral", Georgia, "Times New Roman", serif);
   --font-ui: var(--salt-font-sans, "Poppins", system-ui, sans-serif);
   --radius-xl: 28px;
   --radius-lg: 22px;
@@ -209,8 +209,8 @@
 .salt-dashboard-feedback-mount .modal-header h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 500;
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 600;
   letter-spacing: -0.03em;
   color: var(--it-dark);
 }
@@ -220,7 +220,8 @@
   color: var(--it-neutral-0);
   line-height: 1.6;
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--salt-type-subtitle-size, 14px);
+  font-weight: var(--salt-type-subtitle-weight, 400);
 }
 
 .salt-dashboard-feedback-mount .eyebrow {
@@ -231,9 +232,9 @@
   background: rgba(44, 135, 152, 0.1);
   color: var(--it-teal);
   border: 1px solid rgba(44, 135, 152, 0.14);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font-size: var(--salt-type-eyebrow-size, 12px);
+  font-weight: var(--salt-type-eyebrow-weight, 500);
+  letter-spacing: var(--salt-type-eyebrow-tracking, 0.12em);
   text-transform: uppercase;
   font-family: var(--font-ui);
 }

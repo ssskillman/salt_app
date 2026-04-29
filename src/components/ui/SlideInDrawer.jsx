@@ -44,13 +44,35 @@ export default function SlideInDrawer({ open, onClose, title, subtitle, children
           // The Slide Effect
           transform: open ? "translateX(0)" : `translateX(${isLeft ? "-100%" : "100%"})`,
           transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          fontFamily: "system-ui",
+          fontFamily: "var(--salt-font-sans)",
         }}
       >
         <div style={{ padding: "20px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 900 }}>{title}</h2>
-            {subtitle && <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#666", fontWeight: 700 }}>{subtitle}</p>}
+            <h2
+              style={{
+                margin: 0,
+                fontFamily: "var(--salt-font-sans)",
+                fontSize: "var(--salt-type-h1-size)",
+                fontWeight: "var(--salt-type-h1-weight)",
+                color: "#0f172a",
+              }}
+            >
+              {title}
+            </h2>
+            {subtitle && (
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontFamily: "var(--salt-font-sans)",
+                  fontSize: "var(--salt-type-subtitle-size)",
+                  fontWeight: "var(--salt-type-subtitle-weight)",
+                  color: "#64748b",
+                }}
+              >
+                {subtitle}
+              </p>
+            )}
           </div>
           <button onClick={onClose} style={{ border: "none", background: "none", fontSize: "20px", cursor: "pointer", fontWeight: 900 }}>✕</button>
         </div>

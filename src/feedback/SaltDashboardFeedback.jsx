@@ -31,7 +31,8 @@ const FEEDBACK_TYPES = [
   {
     id: "data_issue",
     label: "Data issue",
-    description: "Numbers look wrong or don’t match what the dashboard implies.",
+    description:
+      "Numbers look wrong, disagree with Sigma/source, or conflict across cards (e.g. QTD vs YoY $).",
     icon: AlertTriangle,
   },
   {
@@ -43,7 +44,8 @@ const FEEDBACK_TYPES = [
   {
     id: "drilldown_issue",
     label: "Drilldown mismatch",
-    description: "Summary and detail do not line up.",
+    description:
+      "Cards, YoY %, drill tables, or in-modal math don’t line up (Create & Close, Horseman JSON detail, etc.).",
     icon: Bug,
   },
   {
@@ -302,6 +304,16 @@ export default function SaltDashboardFeedback({
   }, [captureRef, isOpen]);
 
   const selectedType = FEEDBACK_TYPES.find((item) => item.id === feedbackType);
+
+  const detailsPlaceholder = useMemo(() => {
+    if (feedbackType === "drilldown_issue") {
+      return "Which drill (e.g. Create & Close YoY, Horseman segment)? Expected $ / % / counts vs what you see—in the table or the formula block.";
+    }
+    if (feedbackType === "data_issue") {
+      return "Expected vs actual values, which cards or columns disagree, and any Sigma control or FYQ context.";
+    }
+    return "Expected vs actual, steps to reproduce, or extra context";
+  }, [feedbackType]);
   const selectedPriority = PRIORITIES.find((item) => item.id === priority);
 
   const screenshotLine = useMemo(() => formatScreenshotLine(attachment), [attachment]);
@@ -644,7 +656,8 @@ export default function SaltDashboardFeedback({
                   <h3 id="feedback-modal-title">Tell us what needs attention</h3>
                   <p>
                     Fast feedback for data issues, drilldown mismatches, confusing UX, and feature
-                    requests.
+                    requests. Section and metric capture where you were—including many drill modals
+                    when you open feedback from there.
                   </p>
                 </div>
 
@@ -784,7 +797,7 @@ export default function SaltDashboardFeedback({
                     rows={6}
                     value={details}
                     onChange={(e) => setDetails(e.target.value)}
-                    placeholder="Expected vs actual, steps to reproduce, or extra context"
+                    placeholder={detailsPlaceholder}
                   />
                 </div>
               </div>

@@ -86,7 +86,7 @@ export function useExecutiveInsights({ derivedMetrics }) {
     if (lateQuarterPct >= 0.35) {
       companyItems.push({
         key: "late_quarter",
-        teaser: "Close timing risk",
+        teaser: "Timing risk",
         headline: `${formatPct0(lateQuarterPct)} of open pipeline is scheduled to close in the final 2 weeks of the quarter.`,
         supporting: [
           cqOpenAmount > 0
@@ -122,7 +122,7 @@ export function useExecutiveInsights({ derivedMetrics }) {
     if (needsAmount > 0 && openPipeAmount > 0) {
       companyItems.push({
         key: "needs_attention",
-        teaser: "Needs Attn...",
+        teaser: "Needs attn",
         headline: `${formatPct0(
           needsAmount / openPipeAmount
         )} of open ACV is marked Needs Attention and should be monitored closely.`,

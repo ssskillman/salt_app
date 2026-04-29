@@ -61,8 +61,28 @@ function DefinitionItem({ term, body, def }) {
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 950, color: "rgba(15,23,42,0.92)" }}>{term}</div>
-      <div style={{ marginTop: 4, fontSize: 12, lineHeight: "18px", color: "rgba(15,23,42,0.78)" }}>{text}</div>
+      <div
+        style={{
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-h2-size)",
+          fontWeight: "var(--salt-type-h2-weight)",
+          color: "rgba(15,23,42,0.92)",
+        }}
+      >
+        {term}
+      </div>
+      <div
+        style={{
+          fontFamily: "var(--salt-font-sans)",
+          marginTop: 4,
+          fontSize: "var(--salt-type-body-size)",
+          fontWeight: "var(--salt-type-body-weight)",
+          lineHeight: 1.5,
+          color: "rgba(15,23,42,0.78)",
+        }}
+      >
+        {text}
+      </div>
     </div>
   );
 }
@@ -84,9 +104,10 @@ function DefinitionsSectionCard({ title, subtitle, items }) {
       <div style={{ marginBottom: 14 }}>
         <div
           style={{
-            fontSize: 12,
-            fontWeight: 950,
-            letterSpacing: 0.5,
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-eyebrow-size)",
+            fontWeight: "var(--salt-type-eyebrow-weight)",
+            letterSpacing: "var(--salt-type-eyebrow-tracking)",
             color: "#475569",
             textTransform: "uppercase",
           }}
@@ -94,7 +115,16 @@ function DefinitionsSectionCard({ title, subtitle, items }) {
           {title}
         </div>
         {subtitle && (
-          <div style={{ marginTop: 4, fontSize: 11, fontWeight: 850, opacity: 0.6, lineHeight: "14px" }}>
+          <div
+            style={{
+              fontFamily: "var(--salt-font-sans)",
+              marginTop: 4,
+              fontSize: "var(--salt-type-body-size)",
+              fontWeight: "var(--salt-type-body-weight)",
+              opacity: 0.72,
+              lineHeight: 1.45,
+            }}
+          >
             {subtitle}
           </div>
         )}
@@ -123,9 +153,10 @@ function ViewSummaryCard({ summary }) {
     >
       <div
         style={{
-          fontSize: 12,
-          fontWeight: 950,
-          letterSpacing: 0.5,
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-eyebrow-size)",
+          fontWeight: "var(--salt-type-eyebrow-weight)",
+          letterSpacing: "var(--salt-type-eyebrow-tracking)",
           color: "#475569",
           textTransform: "uppercase",
           marginBottom: 10,
@@ -135,19 +166,46 @@ function ViewSummaryCard({ summary }) {
       </div>
 
       {summary.title && (
-        <div style={{ fontSize: 13, fontWeight: 950, color: "rgba(15,23,42,0.92)", marginBottom: 8 }}>
+        <div
+          style={{
+            fontFamily: "var(--salt-font-display)",
+            fontSize: "var(--salt-type-h1-size)",
+            fontWeight: "var(--salt-type-h1-weight)",
+            color: "rgba(15,23,42,0.92)",
+            marginBottom: 8,
+          }}
+        >
           {summary.title}
         </div>
       )}
 
       {summary.body && (
-        <div style={{ fontSize: 12, lineHeight: "18px", color: "rgba(15,23,42,0.78)", marginBottom: 10 }}>
+        <div
+          style={{
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-body-size)",
+            fontWeight: "var(--salt-type-body-weight)",
+            lineHeight: 1.5,
+            color: "rgba(15,23,42,0.78)",
+            marginBottom: 10,
+          }}
+        >
           {summary.body}
         </div>
       )}
 
       {Array.isArray(summary.bullets) && summary.bullets.length > 0 && (
-        <ul style={{ margin: 0, paddingLeft: 18, color: "rgba(15,23,42,0.78)", fontSize: 12, lineHeight: "18px" }}>
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: 18,
+            color: "rgba(15,23,42,0.78)",
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-body-size)",
+            fontWeight: "var(--salt-type-body-weight)",
+            lineHeight: 1.5,
+          }}
+        >
           {summary.bullets.map((b, i) => (
             <li key={`${i}-${b}`}>{b}</li>
           ))}
@@ -173,9 +231,10 @@ function SectionSummaryCard({ title, summary }) {
     >
       <div
         style={{
-          fontSize: 12,
-          fontWeight: 950,
-          letterSpacing: 0.5,
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-eyebrow-size)",
+          fontWeight: "var(--salt-type-eyebrow-weight)",
+          letterSpacing: "var(--salt-type-eyebrow-tracking)",
           color: "#475569",
           textTransform: "uppercase",
           marginBottom: 10,
@@ -184,9 +243,31 @@ function SectionSummaryCard({ title, summary }) {
         Section Summary
       </div>
 
-      {title && <div style={{ fontSize: 13, fontWeight: 950, color: "rgba(15,23,42,0.92)", marginBottom: 8 }}>{title}</div>}
+      {title && (
+        <div
+          style={{
+            fontFamily: "var(--salt-font-display)",
+            fontSize: "var(--salt-type-h1-size)",
+            fontWeight: "var(--salt-type-h1-weight)",
+            color: "rgba(15,23,42,0.92)",
+            marginBottom: 8,
+          }}
+        >
+          {title}
+        </div>
+      )}
 
-      <div style={{ fontSize: 12, lineHeight: "18px", color: "rgba(15,23,42,0.78)" }}>{summary}</div>
+      <div
+        style={{
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-body-size)",
+          fontWeight: "var(--salt-type-body-weight)",
+          lineHeight: 1.5,
+          color: "rgba(15,23,42,0.78)",
+        }}
+      >
+        {summary}
+      </div>
     </div>
   );
 }
@@ -222,7 +303,7 @@ function SlideInDrawer({ open, title, subtitle, onClose, children }) {
           zIndex: 12001,
           display: "flex",
           flexDirection: "column",
-          fontFamily: "system-ui",
+          fontFamily: "var(--salt-font-sans)",
         }}
       >
         <div
@@ -235,8 +316,28 @@ function SlideInDrawer({ open, title, subtitle, onClose, children }) {
           }}
         >
           <div>
-            <div style={{ fontSize: 16, fontWeight: 950, color: "rgba(15,23,42,0.92)" }}>{title}</div>
-            {subtitle && <div style={{ fontSize: 12, fontWeight: 850, opacity: 0.65 }}>{subtitle}</div>}
+            <div
+              style={{
+                fontFamily: "var(--salt-font-sans)",
+                fontSize: "var(--salt-type-h1-size)",
+                fontWeight: "var(--salt-type-h1-weight)",
+                color: "rgba(15,23,42,0.92)",
+              }}
+            >
+              {title}
+            </div>
+            {subtitle && (
+              <div
+                style={{
+                  fontFamily: "var(--salt-font-sans)",
+                  fontSize: "var(--salt-type-subtitle-size)",
+                  fontWeight: "var(--salt-type-subtitle-weight)",
+                  opacity: 0.72,
+                }}
+              >
+                {subtitle}
+              </div>
+            )}
           </div>
 
           <button
