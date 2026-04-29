@@ -156,6 +156,29 @@ const COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE = {
   minHeight: 52,
 };
 
+function renderCompanyTotalsAllBusinessLinesFooter() {
+  return (
+    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+      <span
+        style={{
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-body-size)",
+          fontWeight: "var(--salt-type-body-weight)",
+          letterSpacing: 0.02,
+          opacity: 0.78,
+        }}
+      >
+        All Business Lines
+      </span>
+    </div>
+  );
+}
+
+/** Same divider band as other Company Totals cards; body reserved for future copy. */
+function renderCompanyTotalsBlankFooterBand() {
+  return <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE} aria-hidden="true" />;
+}
+
 function findColIdByName(cols, name) {
   if (!Array.isArray(cols) || !name) return null;
   const target = norm(name);
@@ -5085,21 +5108,7 @@ const productMixDrillRows = useMemo(() => {
                   value={fmtMoneyCompact(budgetValue)}
                   headerRight={<MiniAcvPill />}
                   footerCompact
-                  footer={
-                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
-                      <span
-                        style={{
-                          fontFamily: "var(--salt-font-sans)",
-                          fontSize: "var(--salt-type-body-size)",
-                          fontWeight: "var(--salt-type-body-weight)",
-                          letterSpacing: 0.02,
-                          opacity: 0.78,
-                        }}
-                      >
-                        All Business Lines
-                      </span>
-                    </div>
-                  }
+                  footer={renderCompanyTotalsAllBusinessLinesFooter()}
                 />
                 <MetricCard
                   label="FORECAST"
@@ -5111,21 +5120,7 @@ const productMixDrillRows = useMemo(() => {
                   onClick={undefined}
                   title="Click the number to jump to CRO • Expand for breakdown"
                   footerCompact
-                  footer={
-                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
-                      <span
-                        style={{
-                          fontFamily: "var(--salt-font-sans)",
-                          fontSize: "var(--salt-type-body-size)",
-                          fontWeight: "var(--salt-type-body-weight)",
-                          letterSpacing: 0.02,
-                          opacity: 0.78,
-                        }}
-                      >
-                        All Business Lines
-                      </span>
-                    </div>
-                  }
+                  footer={renderCompanyTotalsAllBusinessLinesFooter()}
                   expandRows={[
                   {
                     key: "forecast",
@@ -5177,6 +5172,8 @@ const productMixDrillRows = useMemo(() => {
                 <MetricCard
                   label="PACING TO FORECAST"
                   value={fmtPct1(companyPacingToForecastValue)}
+                  footerCompact
+                  footer={renderCompanyTotalsBlankFooterBand()}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "Pacing to Forecast" });
                     setShowForecastAttainmentModal(true);
@@ -5187,6 +5184,8 @@ const productMixDrillRows = useMemo(() => {
                 <MetricCard
                   label="2Y CAGR (ACV)"
                   value={fmtPct1(companyCagrValue)}
+                  footerCompact
+                  footer={renderCompanyTotalsBlankFooterBand()}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "2Y CAGR (ACV)" });
                     setCagrDrillOpen(true);
@@ -5197,6 +5196,8 @@ const productMixDrillRows = useMemo(() => {
                 <MetricCard
                   label="STAGE 4+ COVERAGE"
                   value={fmtX(companyStage4Value)}
+                  footerCompact
+                  footer={renderCompanyTotalsBlankFooterBand()}
                   isWip
                   title={STAGE4_COMMIT_DATA_WIP_NOTE}
                 />
@@ -5204,6 +5205,8 @@ const productMixDrillRows = useMemo(() => {
                 <MetricCard
                   label="VELOCITY"
                   value={fmtPct1(companyVelocityValue)}
+                  footerCompact
+                  footer={renderCompanyTotalsBlankFooterBand()}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "Velocity" });
                     setVelocityDrillOpen(true);
@@ -5214,6 +5217,8 @@ const productMixDrillRows = useMemo(() => {
                 <MetricCard
                   label="% FUNDED"
                   value={fmtPct1(companyFundedValue)}
+                  footerCompact
+                  footer={renderCompanyTotalsBlankFooterBand()}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "% Funded" });
                     setFundedDrillOpen(true);
@@ -5231,6 +5236,8 @@ const productMixDrillRows = useMemo(() => {
                 <MetricCard
                   label="PG ATTAINMENT"
                   value={fmtPct1(pgSummary.quarterAttainment)}
+                  footerCompact
+                  footer={renderCompanyTotalsBlankFooterBand()}
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "PG Attainment" });
                     setPgDrillOpen(true);
