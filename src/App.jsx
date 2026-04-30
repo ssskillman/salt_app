@@ -179,6 +179,48 @@ function renderCompanyTotalsBlankFooterBand() {
   return <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE} aria-hidden="true" />;
 }
 
+/** Closed (QTD): gap vs Forecast only (closed $ − forecast $), same copy as the legacy subValue/subLabel row. */
+function renderCompanyTotalsClosedQtdFooter(vsForecastDelta) {
+  return (
+    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+      {vsForecastDelta != null ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-body-size)",
+            fontWeight: "var(--salt-type-body-weight)",
+            letterSpacing: 0.02,
+            opacity: 0.78,
+          }}
+        >
+          <span>
+            {vsForecastDelta < 0 ? "▼" : "▲"} {fmtMoneyCompact(Math.abs(vsForecastDelta))}
+          </span>
+          <span style={{ opacity: 0.6 }}>
+            {vsForecastDelta < 0 ? "behind Forecast" : "ahead of Forecast"}
+          </span>
+        </div>
+      ) : (
+        <span
+          style={{
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-body-size)",
+            fontWeight: "var(--salt-type-body-weight)",
+            letterSpacing: 0.02,
+            opacity: 0.78,
+          }}
+        >
+          —
+        </span>
+      )}
+    </div>
+  );
+}
+
 function findColIdByName(cols, name) {
   if (!Array.isArray(cols) || !name) return null;
   const target = norm(name);
@@ -2687,16 +2729,6 @@ const companyTotalsDerivedMetrics = useDerivedMetrics({
     0
   );
 
-  const companyClosedQtdOppCount = useMemo(() => {
-    const key = companyTotalsSpineKeys?.closed;
-    if (!key || !Array.isArray(companyTotalsSpineRows)) return 0;
-    let n = 0;
-    for (const r of companyTotalsSpineRows) {
-      if ((toNumber(r?.[key]) || 0) > 0) n += 1;
-    }
-    return n;
-  }, [companyTotalsSpineRows, companyTotalsSpineKeys.closed]);
-
   const companyStage4Value = useMemo(() => {
     const stageKey =
       resolveColumnKey(config?.eso_stage) ||
@@ -3978,6 +4010,21 @@ const createCloseMetrics = useMemo(() => {
       return priorFiscalYearSameQuarterKey(canon);
     }, [selectedFiscalYearquarter]);
 
+    const largeDealsClusterLabels = useMemo(() => {
+      const cy =
+        selectedFiscalYearquarter != null && String(selectedFiscalYearquarter).trim() !== ""
+          ? String(selectedFiscalYearquarter).trim()
+          : null;
+      const py =
+        priorYearFiscalYearquarter != null && String(priorYearFiscalYearquarter).trim() !== ""
+          ? String(priorYearFiscalYearquarter).trim()
+          : null;
+      return {
+        current: cy ? `Current · QTD (${cy})` : "Current · QTD",
+        prior: py ? `Prior FY · QTD (${py})` : "Prior FY · QTD",
+      };
+    }, [selectedFiscalYearquarter, priorYearFiscalYearquarter]);
+
   const scopedLargeDealsSpineRows = useMemo(() => {
     const scoped = filterRowsByScope(
       rows?.employeeScopeOpportunitySpine || [],
@@ -5160,11 +5207,7 @@ const productMixDrillRows = useMemo(() => {
                   labelTextTransform="none"
                   value={fmtMoneyCompact(companyClosedQTDValue)}
                   footerCompact
-                  footer={
-                    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
-                      {renderCompanyTotalsClosedWonOppsFooterLines(companyClosedQtdOppCount)}
-                    </div>
-                  }
+                  footer={renderCompanyTotalsClosedQtdFooter(companyClosedVsForecastDelta)}
                   onClick={openClosedTrendFromMetric}
                   title="Click to expand Closed Trend"
                 />
@@ -5926,40 +5969,60 @@ const productMixDrillRows = useMemo(() => {
                   }
                     onInfo={() => openDefs("deals_500k")}
                   />
-                  <div style={{ ...styles.metricGrid, ...styles.ceoMetricGridFill }}>
-                    <MetricCard
-                      label="WON"
-                      value={scopedLargeDealsSummary.wonQTD}
-                      onClick={() => openLargeDealsDrill("Won QTD")}
-                      title="Click to view underlying 500K+ won deals"
-                    />
-
-                    <MetricCard
-                      label="OPEN PIPELINE"
-                      value={scopedLargeDealsSummary.openPipeQTD}
-                      onClick={() => openLargeDealsDrill("Open Pipeline QTD")}
-                      title="Click to view underlying 500K+ open pipeline deals"
-                    />
-                    <MetricCard
-                      label="OPEN PIPELINE YOY"
-                      value={fmtPct1(scopedLargeDealsSummary.openPipeQTDYoy)}
-                      {...(scopedLargeDealsSummary.openPipeQtdYoyCurrCount != null &&
-                      scopedLargeDealsSummary.openPipeQtdYoyPriorCount != null
-                        ? {
-                            subValue: `${scopedLargeDealsSummary.openPipeQtdYoyCurrCount} vs ${scopedLargeDealsSummary.openPipeQtdYoyPriorCount}`,
-                            subLabel: "Open $500K+ deals · this FYQ vs same FYQ last year",
-                          }
-                        : {})}
-                      onClick={() => openLargeDealsDrill("Open Pipeline QTD YoY")}
-                      title="YoY compares counts of $500K+ open deals in this fiscal quarter vs the same fiscal quarter last year (scoped). Drill lists the prior-year same FYQ bucket. “1 vs 0” means one qualifying deal now and none in that prior bucket — not that the same opp must appear in both. Falls back to company % if FYQ cannot be aligned on spine rows."
-                    />
-                    <MetricCard
-                      label="PY QTD WON"
-                      value={scopedLargeDealsSummary.py}
-                      onClick={() => openLargeDealsDrill("Prior Year")}
-                      title="Click to view prior-year large deals"
-                      isWip={false}
-                    />
+                  <div
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      ...styles.createCloseCeoMetricsGrid,
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <div style={styles.createCloseMetricCluster}>
+                      <div style={styles.createCloseMetricClusterLabel}>
+                        {largeDealsClusterLabels.current}
+                      </div>
+                      <div style={styles.createCloseMetricClusterInner}>
+                        <MetricCard
+                          label="WON"
+                          value={scopedLargeDealsSummary.wonQTD}
+                          onClick={() => openLargeDealsDrill("Won QTD")}
+                          title="Click to view underlying 500K+ won deals"
+                        />
+                        <MetricCard
+                          label="OPEN PIPELINE"
+                          value={scopedLargeDealsSummary.openPipeQTD}
+                          onClick={() => openLargeDealsDrill("Open Pipeline QTD")}
+                          title="Click to view underlying 500K+ open pipeline deals"
+                        />
+                      </div>
+                    </div>
+                    <div style={styles.createCloseMetricCluster}>
+                      <div style={styles.createCloseMetricClusterLabel}>
+                        {largeDealsClusterLabels.prior}
+                      </div>
+                      <div style={styles.createCloseMetricClusterInner}>
+                        <MetricCard
+                          label="OPEN PIPELINE YOY"
+                          value={fmtPct1(scopedLargeDealsSummary.openPipeQTDYoy)}
+                          {...(scopedLargeDealsSummary.openPipeQtdYoyCurrCount != null &&
+                          scopedLargeDealsSummary.openPipeQtdYoyPriorCount != null
+                            ? {
+                                subValue: `${scopedLargeDealsSummary.openPipeQtdYoyCurrCount} vs ${scopedLargeDealsSummary.openPipeQtdYoyPriorCount}`,
+                                subLabel: "Open $500K+ deals · this FYQ vs same FYQ last year",
+                              }
+                            : {})}
+                          onClick={() => openLargeDealsDrill("Open Pipeline QTD YoY")}
+                          title="YoY compares counts of $500K+ open deals in this fiscal quarter vs the same fiscal quarter last year (scoped). Drill lists the prior-year same FYQ bucket. “1 vs 0” means one qualifying deal now and none in that prior bucket — not that the same opp must appear in both. Falls back to company % if FYQ cannot be aligned on spine rows."
+                        />
+                        <MetricCard
+                          label="PY QTD WON"
+                          value={scopedLargeDealsSummary.py}
+                          onClick={() => openLargeDealsDrill("Prior Year")}
+                          title="Click to view prior-year large deals"
+                          isWip={false}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </Surface>
                 </div>

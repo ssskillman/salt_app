@@ -103,7 +103,7 @@ export const DEFINITIONS = {
       },
       {
         term: "Closed (QTD)",
-        def: "Closed Won ACV booked quarter-to-date for the selected business line on the company opportunity spine.\nThe card footer shows how many opportunities in that slice have positive closed ACV in the column: the count on the first line and “Closed Won Opps” on the second.\nWhy it matters: Realized bookings for the quarter; click opens the Closed Trend view.",
+        def: "Closed Won ACV booked quarter-to-date for the selected business line on the company opportunity spine.\nThe card footer shows the gap vs company Forecast for the quarter: ▲/▼ with the absolute dollar gap and “ahead of Forecast” or “behind Forecast” (closed $ − forecast $).\nWhy it matters: Realized bookings vs plan; click opens the Closed Trend view.",
       },
       {
         term: "PACING TO FORECAST",
