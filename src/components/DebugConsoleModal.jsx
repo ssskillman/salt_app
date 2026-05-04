@@ -1,4 +1,5 @@
 // src/components/DebugConsoleModal.jsx
+/* eslint-disable react-refresh/only-export-components -- exports mapping helpers alongside the modal */
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { client } from "@sigmacomputing/plugin";
 import Modal from "./ui/Modal";
@@ -608,6 +609,28 @@ const MAPPING_SECTIONS = [
   },
 ];
 
+function slugifySectionTitle(title) {
+  const s = String(title || "section")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return s || "section";
+}
+
+/** Sections that typically ship on the CEO dashboard path (excludes CFO/CRO/CPO-only blocks). */
+function isCeoPathMappingSectionTitle(secTitle) {
+  const t = secTitle || "";
+  if (/\bCFOTreemap\b|\bCRORevintel\b|\bCPOScorecard\b|\bCPOAccounts\b/i.test(t)) return false;
+  return (
+    /^App\.jsx ·/i.test(t) ||
+    /\bCreateCloseDrillModal\b/i.test(t) ||
+    /\bHorsemanSection\b/i.test(t) ||
+    /\bWaterfallChart\b/i.test(t) ||
+    /\bAEPerformanceDrillModal\b/i.test(t) ||
+    /\bDrillModal\b/i.test(t)
+  );
+}
+
 // -----------------------------
 // UI bits
 // -----------------------------
@@ -711,8 +734,30 @@ function Table({ columns, rows }) {
     }) {  
     
     const PAGE_SIZE = 10;
+    const LOG_SEARCH_SS_KEY = "salt_debug_console_log_search";
+    const LOG_PANE_H_SS_KEY = "salt_debug_console_log_pane_h";
+    const MAX_DEBUG_LOGS = 400;
+
     const [logPage, setLogPage] = useState(0);
     const [logSearch, setLogSearch] = useState("");
+    const [debugTab, setDebugTab] = useState("logs");
+    const [logLevels, setLogLevels] = useState({ info: true, warn: true, error: true, perf: true });
+    const [mappingProblemsOnly, setMappingProblemsOnly] = useState(false);
+    const [logPanePx, setLogPanePx] = useState(() => {
+      try {
+        const v = sessionStorage.getItem(LOG_PANE_H_SS_KEY);
+        if (!v) return 220;
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? Math.min(480, Math.max(120, n)) : 220;
+      } catch {
+        return 220;
+      }
+    });
+    const [copyLogFeedback, setCopyLogFeedback] = useState(null);
+    const [configImportBanner, setConfigImportBanner] = useState(null);
+    const openedAtMsRef = useRef(0);
+    const mappingScrollContainerRef = useRef(null);
+
     const [mappingCopyStatus, setMappingCopyStatus] = useState(null);
     const [mappingExportText, setMappingExportText] = useState("");
     const [mappingManualOpen, setMappingManualOpen] = useState(false);
@@ -722,37 +767,71 @@ function Table({ columns, rows }) {
 
     useEffect(() => {
       if (!open) return;
-      setLogPage(0);
+      const id = window.requestAnimationFrame(() => {
+        setLogPage(0);
+        try {
+          const s = sessionStorage.getItem(LOG_SEARCH_SS_KEY);
+          if (s != null) setLogSearch(s);
+        } catch {
+          // no-op
+        }
+        openedAtMsRef.current = Date.now();
+      });
+      return () => window.cancelAnimationFrame(id);
     }, [open]);
 
     useEffect(() => {
-      if (!open) setConfigImportStatus(null);
+      if (!open) return;
+      try {
+        sessionStorage.setItem(LOG_SEARCH_SS_KEY, logSearch);
+      } catch {
+        // no-op
+      }
+    }, [logSearch, open]);
+
+    useEffect(() => {
+      try {
+        sessionStorage.setItem(LOG_PANE_H_SS_KEY, String(logPanePx));
+      } catch {
+        // no-op
+      }
+    }, [logPanePx]);
+
+    useEffect(() => {
+      if (open) return;
+      const id = window.requestAnimationFrame(() => {
+        setConfigImportStatus(null);
+        setConfigImportBanner(null);
+      });
+      return () => window.cancelAnimationFrame(id);
     }, [open]);
 
     useEffect(() => {
-      setLogPage(0);
-    }, [logSearch]);
+      const id = window.requestAnimationFrame(() => {
+        setLogPage(0);
+      });
+      return () => window.cancelAnimationFrame(id);
+    }, [logSearch, logLevels]);
 
     const filteredLogs = useMemo(() => {
       const reversed = (debugLogs || []).slice().reverse();
 
-      if (!logSearch.trim()) return reversed;
-
-      const q = logSearch.toLowerCase();
-
       return reversed.filter((log) => {
-        const haystack = [
-          log?.message,
-          log?.level,
-          log?.ts,
-        ]
+        const raw = String(log?.level || "info").toLowerCase();
+        const lvl = raw === "warn" || raw === "error" || raw === "perf" ? raw : "info";
+        if (!logLevels[lvl]) return false;
+
+        if (!logSearch.trim()) return true;
+
+        const q = logSearch.toLowerCase();
+        const haystack = [log?.message, log?.level, log?.ts]
           .map((v) => String(v ?? ""))
           .join(" ")
           .toLowerCase();
 
         return haystack.includes(q);
       });
-    }, [debugLogs, logSearch]);
+    }, [debugLogs, logSearch, logLevels]);
 
     const totalLogs = filteredLogs.length;
     const totalPages = Math.max(1, Math.ceil(totalLogs / PAGE_SIZE));
@@ -762,6 +841,63 @@ function Table({ columns, rows }) {
       const end = start + PAGE_SIZE;
       return filteredLogs.slice(start, end);
     }, [filteredLogs, logPage]);
+
+    const handleCopyLogPage = useCallback(async () => {
+      const lines = pagedLogs.map((log) => {
+        let rel = "";
+        try {
+          const t = new Date(log.ts).getTime();
+          const t0 = openedAtMsRef.current;
+          if (Number.isFinite(t) && t0 && t >= t0) {
+            rel = ` (+${((t - t0) / 1000).toFixed(1)}s from open)`;
+          }
+        } catch {
+          // no-op
+        }
+        return `${new Date(log.ts).toLocaleTimeString()}${rel}\t[${log.level}]\t${log.message}`;
+      });
+      const text = lines.join("\n");
+      const ok = await copyTextToClipboardRobust(text);
+      setCopyLogFeedback(ok ? "Copied this page (TSV)" : "Copy failed");
+      window.setTimeout(() => setCopyLogFeedback(null), 2200);
+    }, [pagedLogs]);
+
+    const handleCopyLogPageJson = useCallback(async () => {
+      const payload = pagedLogs.map(({ id, ts, level, message }) => ({ id, ts, level, message }));
+      const ok = await copyTextToClipboardRobust(JSON.stringify(payload, null, 2));
+      setCopyLogFeedback(ok ? "Copied this page (JSON)" : "Copy failed");
+      window.setTimeout(() => setCopyLogFeedback(null), 2200);
+    }, [pagedLogs]);
+
+    const handleClearLogsConfirm = useCallback(() => {
+      if (!window.confirm("Clear all buffered debug logs from memory?")) return;
+      onClearDebugLogs?.();
+      setLogPage(0);
+    }, [onClearDebugLogs]);
+
+    const handleLogResizeMouseDown = useCallback((e) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = logPanePx;
+      const onMove = (ev) => {
+        setLogPanePx(Math.min(480, Math.max(120, startH + (ev.clientY - startY))));
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    }, [logPanePx]);
+
+    const handleCopyMappingRow = useCallback(async (row) => {
+      const line = [row.cfgKey, row.resolvedRowKey, row.Status, row.configVal, row["Field (UI)"]]
+        .map((c) => tsvCell(c))
+        .join("\t");
+      const ok = await copyTextToClipboardRobust(line);
+      setCopyLogFeedback(ok ? "Copied row (TSV)" : "Copy failed");
+      window.setTimeout(() => setCopyLogFeedback(null), 2000);
+    }, []);
 
     const handleCopySigmaMappingExport = useCallback(() => {
       const text = buildSigmaMappingExport(config);
@@ -795,23 +931,37 @@ function Table({ columns, rows }) {
 
     const handleApplySigmaConfigImport = useCallback(() => {
       setConfigImportStatus(null);
+      setConfigImportBanner(null);
       try {
         const payload = parseSigmaConfigImportPaste(configImportPaste);
         if (typeof client?.config?.set !== "function") {
-          setConfigImportStatus("Sigma client.config.set is not available in this build.");
+          const msg = "Sigma client.config.set is not available in this build.";
+          setConfigImportStatus(msg);
+          setConfigImportBanner({ ok: false, message: msg });
           return;
         }
         try {
           client.config.set(payload);
         } catch (err) {
-          setConfigImportStatus(
-            err instanceof Error ? err.message : "Sigma rejected config.set (check edit permissions / ids)."
-          );
+          const msg =
+            err instanceof Error ? err.message : "Sigma rejected config.set (check edit permissions / ids).";
+          setConfigImportStatus(msg);
+          setConfigImportBanner({ ok: false, message: msg });
           return;
         }
-        setConfigImportStatus(`Applied ${Object.keys(payload).length} keys (merged into this plugin's Sigma config).`);
+        const keys = Object.keys(payload);
+        const keysPreview = keys.slice(0, 14);
+        setConfigImportBanner({
+          ok: true,
+          count: keys.length,
+          keysPreview,
+          more: Math.max(0, keys.length - keysPreview.length),
+        });
+        setConfigImportStatus(`Applied ${keys.length} keys (merged into this plugin's Sigma config).`);
       } catch (e) {
-        setConfigImportStatus(e instanceof Error ? e.message : String(e));
+        const msg = e instanceof Error ? e.message : String(e);
+        setConfigImportStatus(msg);
+        setConfigImportBanner({ ok: false, message: msg });
       }
     }, [configImportPaste]);
 
@@ -853,7 +1003,7 @@ function Table({ columns, rows }) {
       cpoAccounts: { rows: rows?.cpoAccounts ?? [], cols: columns?.cpoAccounts },
     };
 
-    const mappingSections = MAPPING_SECTIONS.map((sec) => {
+    const mappingSectionsRaw = MAPPING_SECTIONS.map((sec) => {
       const ds = datasets[sec.dataset] || { rows: [], cols: null };
       const row0 = ds.rows?.[0] ?? null;
 
@@ -899,6 +1049,8 @@ function Table({ columns, rows }) {
 
       return {
         title: sec.title,
+        slug: slugifySectionTitle(sec.title),
+        ceoPath: isCeoPathMappingSectionTitle(sec.title),
         dataset: sec.dataset,
         sourceKey: sec.sourceKey,
         sourceId,
@@ -910,15 +1062,46 @@ function Table({ columns, rows }) {
       };
     });
 
+    const sectionSortScore = (sec) => {
+      let m = 0;
+      let u = 0;
+      let o = 0;
+      for (const r of sec.tableRows) {
+        if (r.Status === "MISSING") m += 1;
+        else if (r.Status === "UNMAPPED") u += 1;
+        else o += 1;
+      }
+      return m * 1_000_000 + u * 1000 - o;
+    };
+
+    const mappingSections = [...mappingSectionsRaw].sort((a, b) => sectionSortScore(b) - sectionSortScore(a));
+
     let okCount = 0;
     let missingCount = 0;
     let unmappedCount = 0;
+    let okCeo = 0;
+    let missCeo = 0;
+    let unCeo = 0;
 
     for (const sec of mappingSections) {
       for (const r of sec.tableRows) {
         if (r.Status === "OK") okCount += 1;
         else if (r.Status === "MISSING") missingCount += 1;
         else unmappedCount += 1;
+
+        if (sec.ceoPath) {
+          if (r.Status === "OK") okCeo += 1;
+          else if (r.Status === "MISSING") missCeo += 1;
+          else unCeo += 1;
+        }
+      }
+    }
+
+    let firstMissingSlug = null;
+    for (const sec of mappingSections) {
+      if (sec.tableRows.some((row) => row.Status === "MISSING")) {
+        firstMissingSlug = sec.slug;
+        break;
       }
     }
 
@@ -928,20 +1111,76 @@ function Table({ columns, rows }) {
       rollupEffectiveKey,
       mappingSections,
       totals: { okCount, missingCount, unmappedCount },
+      totalsCeoPath: { okCount: okCeo, missingCount: missCeo, unmappedCount: unCeo },
+      firstMissingSlug,
     };
   }, [rows, columns, config]);
 
   const topKeys = useMemo(() => Object.keys(data || {}).sort(), [data]);
 
+  const handleJumpToFirstMissing = useCallback(() => {
+    const slug = derived.firstMissingSlug;
+    if (!slug) return;
+    setDebugTab("mappings");
+    window.requestAnimationFrame(() => {
+      const root = mappingScrollContainerRef.current;
+      if (!root) return;
+      const el = root.querySelector(`[data-mapping-section="${slug}"]`);
+      if (el && "open" in el) {
+        try {
+          el.open = true;
+        } catch {
+          // no-op
+        }
+      }
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [derived.firstMissingSlug]);
+
   useEffect(() => {
-    if (logPage > totalPages - 1) {
+    if (logPage <= totalPages - 1) return;
+    const id = window.requestAnimationFrame(() => {
       setLogPage(Math.max(0, totalPages - 1));
-    }
+    });
+    return () => window.cancelAnimationFrame(id);
   }, [logPage, totalPages]);
 
 
+  const tabIds = [
+    { id: "logs", label: "Logs" },
+    { id: "mappings", label: "Mappings" },
+    { id: "sigma", label: "Sigma export" },
+  ];
+
   return (
     <Modal open={open} onClose={onClose} title="Debug Console" subtitle={`Persona: ${activePersona || "—"}`} width={1180}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+      {tabIds.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => setDebugTab(t.id)}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 10,
+            border:
+              debugTab === t.id ? "1px solid rgba(37, 99, 235, 0.45)" : "1px solid rgba(15, 23, 42, 0.12)",
+            background: debugTab === t.id ? "rgba(37, 99, 235, 0.09)" : "white",
+            color: "rgba(15, 23, 42, 0.88)",
+            fontWeight: 950,
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          {t.label}
+        </button>
+      ))}
+      {copyLogFeedback ? (
+        <span style={{ fontSize: 12, fontWeight: 850, color: "rgba(22, 101, 52, 0.95)" }}>{copyLogFeedback}</span>
+      ) : null}
+    </div>
+
+    {debugTab === "logs" && (
     <div style={{ marginBottom: 14 }}>
       <div
         style={{
@@ -971,6 +1210,24 @@ function Table({ columns, rows }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {(["info", "warn", "error", "perf"]).map((lvl) => (
+            <label
+              key={lvl}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 850 }}
+            >
+              <input
+                type="checkbox"
+                checked={!!logLevels[lvl]}
+                onChange={(e) =>
+                  setLogLevels((prev) => ({
+                    ...prev,
+                    [lvl]: e.target.checked,
+                  }))
+                }
+              />
+              {lvl}
+            </label>
+          ))}
           <input
             type="text"
             value={logSearch}
@@ -1011,14 +1268,23 @@ function Table({ columns, rows }) {
             Next 10
           </button>
 
-          <button onClick={() => onClearDebugLogs?.()}>
+          <button type="button" onClick={handleCopyLogPage}>
+            Copy page (TSV)
+          </button>
+
+          <button type="button" onClick={handleCopyLogPageJson}>
+            Copy page (JSON)
+          </button>
+
+          <button type="button" onClick={handleClearLogsConfirm}>
             Clear
           </button>
         </div>
       </div>
 
       <div style={{
-        maxHeight: 220,
+        height: logPanePx,
+        maxHeight: logPanePx,
         overflowY: "auto",
         background: "#0f172a",
         color: "#e2e8f0",
@@ -1062,7 +1328,62 @@ function Table({ columns, rows }) {
           ))
         )}
       </div>
+      <div
+        onMouseDown={handleLogResizeMouseDown}
+        style={{
+          height: 8,
+          marginTop: 4,
+          borderRadius: 6,
+          cursor: "ns-resize",
+          background: "linear-gradient(180deg, rgba(15,23,42,0.08), rgba(15,23,42,0.14))",
+          border: "1px solid rgba(15,23,42,0.1)",
+        }}
+        title="Drag to resize log pane"
+      />
+      <div style={{ marginTop: 8, fontSize: 11, fontWeight: 650, color: "rgba(15,23,42,0.55)" }}>
+        In-memory buffer holds up to {MAX_DEBUG_LOGS} entries (oldest dropped when full). Search text is saved for
+        this browser session.
+      </div>
     </div>
+    )}
+
+    {debugTab === "mappings" && (
+    <>
+      {derived.totals.missingCount > 0 ? (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid rgba(245, 158, 11, 0.35)",
+            background: "rgba(245, 158, 11, 0.1)",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 950, color: "rgba(120, 53, 15, 0.95)" }}>
+            {derived.totals.missingCount} mapping{derived.totals.missingCount === 1 ? "" : "s"} point at Sigma controls
+            but the column was not found on the dataset’s first row — fix these first.
+          </span>
+          <button type="button" onClick={handleJumpToFirstMissing}>
+            Jump to first Missing
+          </button>
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 850 }}>
+          <input
+            type="checkbox"
+            checked={mappingProblemsOnly}
+            onChange={(e) => setMappingProblemsOnly(e.target.checked)}
+          />
+          Show only Missing / Unmapped rows
+        </label>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <div style={cardStyle}>
           <div style={cardLabel}>Company effective dataset</div>
@@ -1077,17 +1398,190 @@ function Table({ columns, rows }) {
         </div>
 
         <div style={cardStyle}>
-          <div style={cardLabel}>Mapping health</div>
+          <div style={cardLabel}>Mapping health (all datasets)</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
             <Pill tone="ok">OK: {derived.totals.okCount}</Pill>
             <Pill tone="warn">Missing: {derived.totals.missingCount}</Pill>
             <Pill tone="bad">Unmapped: {derived.totals.unmappedCount}</Pill>
           </div>
-          <div style={cardHint}>“Missing” means mapped, but doesn’t exist on row keys.</div>
+          <div
+            style={{
+              ...cardHint,
+              marginTop: 8,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <strong>CEO dashboard path</strong>
+            <span style={{ fontSize: 12, fontWeight: 650 }}>
+              (company, field, rollup, create/close, horseman, waterfall, drills)
+            </span>
+            <Pill tone="ok">OK: {derived.totalsCeoPath.okCount}</Pill>
+            <Pill tone="warn">Missing: {derived.totalsCeoPath.missingCount}</Pill>
+            <Pill tone="bad">Unmapped: {derived.totalsCeoPath.unmappedCount}</Pill>
+          </div>
+          <div style={{ ...cardHint, marginTop: 6 }}>
+            <strong>Missing</strong> = Sigma control is set, but the column is not on the dataset’s first row.{" "}
+            <strong>Unmapped</strong> = no control wired for that catalog slot (normal for features you do not use).
+          </div>
         </div>
       </div>
 
-      <div style={{ ...cardStyle, marginTop: 12 }}>
+      <div
+        ref={mappingScrollContainerRef}
+        style={{
+          marginTop: 12,
+          maxHeight: "min(58vh, 680px)",
+          overflowY: "auto",
+          paddingRight: 4,
+        }}
+      >
+
+      <details style={detailsStyle}>
+        <summary style={summaryStyle}>Dataset inventory (row counts + column counts + first row keys)</summary>
+
+        <Table
+          columns={["Dataset", "Rows", "Cols(meta)", "FirstRowKeys (preview)"]}
+          rows={Object.entries(derived.datasets).map(([k, v]) => ({
+            Dataset: k,
+            Rows: Array.isArray(v.rows) ? v.rows.length : 0,
+            "Cols(meta)": colCount(v.cols),
+            "FirstRowKeys (preview)": rowKeysPreview(v.rows).join(", "),
+          }))}
+        />
+      </details>
+
+      <details open style={detailsStyle}>
+        <summary style={summaryStyle}>Component mappings (what each section expects)</summary>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {derived.mappingSections.map((sec) => {
+            const anyMissing = sec.tableRows.some((r) => r.Status === "MISSING");
+            const anyUnmapped = sec.tableRows.some((r) => r.Status === "UNMAPPED");
+            const hasMappingRows = sec.tableRows.length > 0;
+            const hasPreview = !!sec.preview;
+            const shouldOpen = (anyMissing || anyUnmapped) || (!hasMappingRows && hasPreview && sec.dsRowCount > 0);
+            const visibleRows = mappingProblemsOnly
+              ? sec.tableRows.filter((r) => r.Status === "MISSING" || r.Status === "UNMAPPED")
+              : sec.tableRows;
+            const allOkHidden =
+              mappingProblemsOnly && hasMappingRows && visibleRows.length === 0 && sec.tableRows.length > 0;
+
+            return (
+              <details
+                key={sec.title}
+                data-mapping-section={sec.slug}
+                style={nestedDetailsStyle}
+                open={shouldOpen}
+              >
+                <summary style={nestedSummaryStyle}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 950 }}>{sec.title}</div>
+                    <Pill>{sec.dataset}</Pill>
+                    <Pill tone={sec.sourceId ? "ok" : "warn"}>
+                      source: {sec.sourceKey} {sec.sourceId ? "✓" : "—"}
+                    </Pill>
+                    <Pill>{sec.dsRowCount} rows</Pill>
+                    <Pill>{sec.dsColCount} cols(meta)</Pill>
+                    {hasMappingRows && anyMissing && <Pill tone="warn">has missing</Pill>}
+                    {hasMappingRows && anyUnmapped && <Pill tone="bad">has unmapped</Pill>}
+                    {allOkHidden ? <Pill tone="ok">all OK (hidden)</Pill> : null}
+                    {!hasMappingRows && hasPreview && <Pill tone="neutral">preview</Pill>}
+                  </div>
+                </summary>
+
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 850, color: "rgba(15,23,42,0.70)", marginBottom: 6 }}>
+                    First row keys (preview)
+                  </div>
+                  <div style={keysBoxStyle}>{sec.firstRowKeys.join(", ") || "—"}</div>
+
+                  {hasPreview && (
+                    <>
+                      <div style={{ height: 10 }} />
+                      <div style={{ fontSize: 12, fontWeight: 850, color: "rgba(15,23,42,0.70)", marginBottom: 6 }}>
+                        Preview rows
+                      </div>
+                      <Table columns={sec.preview.keys} rows={sec.preview.rows} />
+                    </>
+                  )}
+
+                  {hasMappingRows && (
+                    <>
+                      <div style={{ height: 10 }} />
+                      <Table
+                        columns={["Field (UI)", "cfgKey", "configVal", "resolvedRowKey", "Status", "Sample", "Copy"]}
+                        rows={visibleRows.map((r) => ({
+                          "Field (UI)": r["Field (UI)"],
+                          cfgKey: r.cfgKey,
+                          configVal: r.configVal,
+                          resolvedRowKey: r.resolvedRowKey,
+                          Status:
+                            r.Status === "OK"
+                              ? "OK"
+                              : r.Status === "MISSING"
+                                ? "MISSING (mapped but not found)"
+                                : "UNMAPPED (no config value)",
+                          Sample: r.Sample,
+                          Copy: (
+                            <button type="button" onClick={() => handleCopyMappingRow(r)}>
+                              Copy row
+                            </button>
+                          ),
+                        }))}
+                      />
+                    </>
+                  )}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </details>
+
+      <details style={detailsStyle}>
+        <summary style={summaryStyle}>Top-level data keys (what App receives)</summary>
+        <div style={keysBoxStyle}>{topKeys.join(", ") || "—"}</div>
+      </details>
+
+      </div>
+    </>
+    )}
+
+    {debugTab === "sigma" && (
+    <>
+      {configImportBanner ? (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: configImportBanner.ok
+              ? "1px solid rgba(34, 197, 94, 0.35)"
+              : "1px solid rgba(239, 68, 68, 0.35)",
+            background: configImportBanner.ok ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.08)",
+            fontSize: 13,
+            fontWeight: 800,
+            color: "rgba(15, 23, 42, 0.9)",
+          }}
+        >
+          {configImportBanner.ok ? (
+            <>
+              Applied <strong>{configImportBanner.count}</strong> keys to Sigma. Sample ids:{" "}
+              <code style={{ fontWeight: 700 }}>{(configImportBanner.keysPreview || []).join(", ")}</code>
+              {configImportBanner.more > 0 ? (
+                <span style={{ fontWeight: 700 }}> … (+{configImportBanner.more} more)</span>
+              ) : null}
+            </>
+          ) : (
+            <>Sigma import: {configImportBanner.message}</>
+          )}
+        </div>
+      ) : null}
+
+      <div style={{ ...cardStyle, marginTop: 0 }}>
         <div style={cardLabel}>Sigma → editorConfig backup</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
           <button type="button" onClick={handleCopySigmaMappingExport}>
@@ -1176,109 +1670,17 @@ function Table({ columns, rows }) {
         </div>
       </div>
 
-      <div style={{ height: 14 }} />
-
       <details open style={detailsStyle}>
         <summary style={summaryStyle}>Element sources (selected)</summary>
         <pre style={preStyle}>{safeJson(debugInfo?.sources ?? {})}</pre>
       </details>
 
       <details style={detailsStyle}>
-        <summary style={summaryStyle}>Dataset inventory (row counts + column counts + first row keys)</summary>
-
-        <Table
-          columns={["Dataset", "Rows", "Cols(meta)", "FirstRowKeys (preview)"]}
-          rows={Object.entries(derived.datasets).map(([k, v]) => ({
-            Dataset: k,
-            Rows: Array.isArray(v.rows) ? v.rows.length : 0,
-            "Cols(meta)": colCount(v.cols),
-            "FirstRowKeys (preview)": rowKeysPreview(v.rows).join(", "),
-          }))}
-        />
-      </details>
-
-      <details open style={detailsStyle}>
-        <summary style={summaryStyle}>Component mappings (what each section expects)</summary>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {derived.mappingSections.map((sec) => {
-            const anyMissing = sec.tableRows.some((r) => r.Status === "MISSING");
-            const anyUnmapped = sec.tableRows.some((r) => r.Status === "UNMAPPED");
-            const hasMappingRows = sec.tableRows.length > 0;
-            const hasPreview = !!sec.preview;
-            const shouldOpen = (anyMissing || anyUnmapped) || (!hasMappingRows && hasPreview && sec.dsRowCount > 0);
-
-            return (
-              <details key={sec.title} style={nestedDetailsStyle} open={shouldOpen}>
-                <summary style={nestedSummaryStyle}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <div style={{ fontWeight: 950 }}>{sec.title}</div>
-                    <Pill>{sec.dataset}</Pill>
-                    <Pill tone={sec.sourceId ? "ok" : "warn"}>
-                      source: {sec.sourceKey} {sec.sourceId ? "✓" : "—"}
-                    </Pill>
-                    <Pill>{sec.dsRowCount} rows</Pill>
-                    <Pill>{sec.dsColCount} cols(meta)</Pill>
-                    {hasMappingRows && anyMissing && <Pill tone="warn">has missing</Pill>}
-                    {hasMappingRows && anyUnmapped && <Pill tone="bad">has unmapped</Pill>}
-                    {!hasMappingRows && hasPreview && <Pill tone="neutral">preview</Pill>}
-                  </div>
-                </summary>
-
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 850, color: "rgba(15,23,42,0.70)", marginBottom: 6 }}>
-                    First row keys (preview)
-                  </div>
-                  <div style={keysBoxStyle}>{sec.firstRowKeys.join(", ") || "—"}</div>
-
-                  {hasPreview && (
-                    <>
-                      <div style={{ height: 10 }} />
-                      <div style={{ fontSize: 12, fontWeight: 850, color: "rgba(15,23,42,0.70)", marginBottom: 6 }}>
-                        Preview rows
-                      </div>
-                      <Table columns={sec.preview.keys} rows={sec.preview.rows} />
-                    </>
-                  )}
-
-                  {hasMappingRows && (
-                    <>
-                      <div style={{ height: 10 }} />
-                      <Table
-                        columns={["Field (UI)", "cfgKey", "configVal", "resolvedRowKey", "Status", "Sample"]}
-                        rows={sec.tableRows.map((r) => ({
-                          "Field (UI)": r["Field (UI)"],
-                          cfgKey: r.cfgKey,
-                          configVal: r.configVal,
-                          resolvedRowKey: r.resolvedRowKey,
-                          Status:
-                            r.Status === "OK"
-                              ? "OK"
-                              : r.Status === "MISSING"
-                              ? "MISSING (mapped but not found)"
-                              : "UNMAPPED (no config value)",
-                          Sample: r.Sample,
-                        }))}
-                      />
-                    </>
-                  )}
-                </div>
-              </details>
-            );
-          })}
-        </div>
-      </details>
-
-      <details style={detailsStyle}>
-        <summary style={summaryStyle}>Top-level data keys (what App receives)</summary>
-        <div style={keysBoxStyle}>{topKeys.join(", ") || "—"}</div>
-      </details>
-
-      <details style={detailsStyle}>
         <summary style={summaryStyle}>Raw config (careful: noisy)</summary>
         <pre style={preStyle}>{safeJson(config ?? {})}</pre>
       </details>
-
+    </>
+    )}
 
     </Modal>
   );

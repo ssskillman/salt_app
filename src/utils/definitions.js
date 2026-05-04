@@ -130,7 +130,7 @@ export const DEFINITIONS = {
         def: "Pipeline generation attainment vs the quarterly PG goal (quarter-to-date).\nWhy it matters: Shows whether the top of funnel is producing enough new pipe to support future quarters; click opens the PG pacing drill.",
       },
       {
-        term: "AI Wins (BETA)",
+        term: "AI WINS (BETA)",
         def: "Count of Closed Won opportunities in the current filters that include at least one AI-attached product line (heuristic on product name / code — beta, subject to refinement).\nThe card footer matches Closed (QTD): total Closed Won opportunity count in the same slice on the first line and “Closed Won Opps” on the second.\nWhy it matters: Fast read on how often AI SKUs show up on winning deals; click opens the product mix drill-down.",
       },
       {
@@ -305,9 +305,9 @@ export const DEFINITIONS = {
   },
 
   product_mix: {
-    title: "AI Wins — product mix (drill)",
+    title: "AI WINS — product mix (drill)",
     summary:
-      "Modal opened from AI Wins (BETA). Lists Closed Won opportunities with line-item detail from orders / CPQ. Use it to see which SKUs—including AI products—sit under each win.",
+      "Modal opened from AI WINS (BETA). Lists Closed Won opportunities with line-item detail from orders / CPQ. Use it to see which SKUs—including AI products—sit under each win.",
     metrics: [
       {
         term: "Line-item $ (sum)",

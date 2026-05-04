@@ -118,7 +118,7 @@ function norm(s) {
   return String(s ?? "").trim().toLowerCase();
 }
 
-/** Company Totals: count on the first line, “Closed Won Opps” on the second (Closed QTD + AI Wins). */
+/** Company Totals: count on the first line, “Closed Won Opps” on the second (Closed QTD + AI WINS). */
 function renderCompanyTotalsClosedWonOppsFooterLines(count) {
   const sans = {
     fontFamily: "var(--salt-font-sans)",
@@ -5405,7 +5405,7 @@ const productMixDrillRows = useMemo(() => {
                 />
 
                 <MetricCard
-                  label="AI Wins"
+                  label="AI WINS"
                   labelTextTransform="none"
                   value={productMixSummary.aiOppCount}
                   headerRight={<MiniBetaPill />}
@@ -5416,10 +5416,10 @@ const productMixDrillRows = useMemo(() => {
                     </div>
                   }
                   onClick={() => {
-                    rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "AI Wins" });
+                    rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "AI WINS" });
                     setProductMixDrillOpen(true);
                   }}
-                  title="Click to view AI Wins details (BETA — metric in development)"
+                  title="Click to view AI WINS details (BETA — metric in development)"
                 />
 
               <ExecutiveInsightPopover
@@ -6592,7 +6592,7 @@ const productMixDrillRows = useMemo(() => {
       <ProductMixDrillModal
         open={productMixDrillOpen}
         onClose={() => setProductMixDrillOpen(false)}
-        title="AI Wins"
+        title="AI WINS"
         rows={productMixDrillRows}
         fieldScopeIsGlobal={!!fieldScopeBridge?.isGlobal}
         fieldScopeLabel={fieldScopeLabel}

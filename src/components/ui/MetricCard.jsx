@@ -339,7 +339,7 @@ export default function MetricCard({
         <div
           style={{
             display: "flex",
-            alignItems: "flex-start",
+            alignItems: headerRight ? "center" : "flex-start",
             justifyContent: "space-between",
             gap: 8,
             minWidth: 0,
@@ -363,7 +363,17 @@ export default function MetricCard({
             {label}
           </div>
 
-          {headerRight}
+          {headerRight ? (
+            <div
+              style={{
+                flexShrink: 0,
+                /* Leave room for the absolute-position launch hint (26px + inset) on hover */
+                marginRight: hasDrill ? 36 : 0,
+              }}
+            >
+              {headerRight}
+            </div>
+          ) : null}
         </div>
 
         <div
