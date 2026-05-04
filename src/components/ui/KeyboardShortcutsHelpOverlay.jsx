@@ -32,14 +32,17 @@ const SHORTCUT_GROUPS = [
       {
         keys: "⌘ / Ctrl + Shift + D",
         desc: "Open or close the debug console.",
+        action: "debugConsole",
       },
       {
         keys: "⌘ / Ctrl + Shift + S",
         desc: "Open the Salt troubleshooting guide (Chrome DevTools steps).",
+        action: "saltTroubleshooting",
       },
       {
         keys: "⌘ / Ctrl + Shift + Y",
         desc: "Open the Salt dashboard architecture map.",
+        action: "architectureMap",
       },
     ],
   },
@@ -62,7 +65,18 @@ function firstSentence(text, maxLen = 220) {
   return `${chunk.slice(0, maxLen - 1)}…`;
 }
 
-export default function KeyboardShortcutsHelpOverlay({ open, onClose }) {
+export default function KeyboardShortcutsHelpOverlay({
+  open,
+  onClose,
+  onOpenDebugConsole,
+  onOpenSaltTroubleshootingGuide,
+  onOpenArchitectureMap,
+}) {
+  const devActionHandlers = {
+    debugConsole: onOpenDebugConsole,
+    saltTroubleshooting: onOpenSaltTroubleshootingGuide,
+    architectureMap: onOpenArchitectureMap,
+  };
   const ceoIntro = VIEW_SUMMARIES?.view_ceo;
 
   const ceoSectionCards = useMemo(() => {
@@ -210,6 +224,34 @@ export default function KeyboardShortcutsHelpOverlay({ open, onClose }) {
     minWidth: 0,
   };
 
+  const devToolButtonReset = {
+    margin: 0,
+    padding: 0,
+    border: "none",
+    background: "none",
+    font: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+  };
+
+  const devToolKeysButtonStyle = {
+    ...devToolButtonReset,
+    ...keysStyle,
+    textDecoration: "underline",
+    textUnderlineOffset: 3,
+    borderRadius: 4,
+  };
+
+  const devToolDescButtonStyle = {
+    ...devToolButtonReset,
+    ...descStyle,
+    color: "#7dd3c0",
+    fontWeight: 700,
+    textDecoration: "underline",
+    textUnderlineOffset: 3,
+    borderRadius: 4,
+  };
+
   const dashHeader = {
     margin: "0 0 8px",
     fontSize: 11,
@@ -321,13 +363,43 @@ export default function KeyboardShortcutsHelpOverlay({ open, onClose }) {
             {SHORTCUT_GROUPS.map((sec) => (
               <div key={sec.title} style={{ marginBottom: 18 }}>
                 <h2 style={kbdSectionTitle}>{sec.title}</h2>
-                {sec.items.map((item) => (
-                  <div key={item.keys + item.desc} style={entry}>
-                    <span style={keysStyle}>{item.keys}</span>
-                    <span style={colon}>:</span>
-                    <span style={descStyle}>{item.desc}</span>
-                  </div>
-                ))}
+                {sec.items.map((item) => {
+                  const handler = item.action ? devActionHandlers[item.action] : null;
+                  const run = () => {
+                    if (typeof handler === "function") handler();
+                  };
+                  const interactive = typeof handler === "function";
+
+                  return (
+                    <div key={item.keys + item.desc} style={entry}>
+                      {interactive ? (
+                        <button
+                          type="button"
+                          style={devToolKeysButtonStyle}
+                          onClick={run}
+                          aria-label={`${item.desc} Same as ${item.keys}.`}
+                        >
+                          {item.keys}
+                        </button>
+                      ) : (
+                        <span style={keysStyle}>{item.keys}</span>
+                      )}
+                      <span style={colon}>:</span>
+                      {interactive ? (
+                        <button
+                          type="button"
+                          style={devToolDescButtonStyle}
+                          onClick={run}
+                          aria-label={`${item.desc} Same as ${item.keys}.`}
+                        >
+                          {item.desc}
+                        </button>
+                      ) : (
+                        <span style={descStyle}>{item.desc}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
 

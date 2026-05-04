@@ -558,13 +558,13 @@ export default function ExecutiveInsightPopover({
               </div>
 
                 <div
-                  key={teaser}
+                  key={`${currentIndex}::${teaser}`}
                   title={teaser}
                   style={{
                     ...insightCardTeaserStyle,
                     opacity: isOpen ? 1 : 0.95,
                     transition: "opacity 300ms ease",
-                    animation: "fadeSlideIn 240ms ease",
+                    animation: "fadeSlideIn 280ms ease",
                   }}
                 >
                   {teaser}

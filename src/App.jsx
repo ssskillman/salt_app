@@ -179,7 +179,35 @@ function renderCompanyTotalsBlankFooterBand() {
   return <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE} aria-hidden="true" />;
 }
 
-/** Closed (QTD): gap vs Forecast only (closed $ − forecast $), same copy as the legacy subValue/subLabel row. */
+/** Below the Company Totals card rule — matches Velocity drill ineligible callout tone. */
+function renderVelocityIneligibleFooterBand(reasonFromSigma) {
+  const text =
+    reasonFromSigma != null && String(reasonFromSigma).trim() !== ""
+      ? String(reasonFromSigma).trim()
+      : "Available after 25% of quarter elapsed.";
+  return (
+    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+      <div
+        style={{
+          borderRadius: 10,
+          border: "1px solid rgba(185, 28, 28, 0.18)",
+          background: "rgba(185, 28, 28, 0.08)",
+          padding: "6px 8px",
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: 11,
+          fontWeight: 850,
+          letterSpacing: 0.02,
+          color: "rgba(15,23,42,0.78)",
+          lineHeight: 1.35,
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
+/** CLOSED (QTD): gap vs Forecast only (closed $ − forecast $), same copy as the legacy subValue/subLabel row. */
 function renderCompanyTotalsClosedQtdFooter(vsForecastDelta) {
   return (
     <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
@@ -1348,6 +1376,7 @@ export default function App() {
   const [executiveInsightIndex, setExecutiveInsightIndex] = useState(0);
   const [executiveInsightPaused, setExecutiveInsightPaused] = useState(false);
   const [executiveInsightProgress, setExecutiveInsightProgress] = useState(0);
+  const [executiveInsightShuffleNonce] = useState(() => Math.random());
 
   const [showArchitecture, setShowArchitecture] = useState(false);
 
@@ -1535,7 +1564,7 @@ export default function App() {
   };
 
   const openClosedTrendFromMetric = () => {
-    rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "Closed (QTD)" });
+    rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "CLOSED (QTD)" });
     setClosedTrendMode("CQ");
 
     setClosedTrendOpen((v) => {
@@ -2835,6 +2864,17 @@ const companyTotalsDerivedMetrics = useDerivedMetrics({
     const pctForecastAchieved = safeDivide(companyClosedQTDValue, forecastValue, null);
     return safeDivide(pctForecastAchieved, velocityPctDaysElapsed, null);
   }, [companyClosedQTDValue, forecastValue, velocityPctDaysElapsed]);
+
+  /** Same rule as `VelocityDrillModal`: Sigma `dv_is_eligible` else ≥25% of quarter elapsed. */
+  const companyVelocityEligible = useMemo(() => {
+    const dv = data?.dv || {};
+    if (dv.isEligible != null) {
+      return Boolean(toNumber(dv.isEligible));
+    }
+    const pe = velocityPctDaysElapsed;
+    if (pe == null) return null;
+    return pe >= 0.25;
+  }, [data?.dv, velocityPctDaysElapsed]);
 
   const companyVelocityModalData = useMemo(() => {
     const baseDv = data?.dv || {};
@@ -4400,6 +4440,7 @@ useEffect(() => {
 
   const companyExecutiveInsights = useExecutiveInsights({
     derivedMetrics: companyTotalsDerivedMetrics,
+    shuffleNonce: executiveInsightShuffleNonce,
   });
 
   const scopedExecutiveInsights = useExecutiveInsights({
@@ -4410,10 +4451,14 @@ useEffect(() => {
     return companyExecutiveInsights?.company?.items || [];
   }, [companyExecutiveInsights]);
 
+  const executiveInsightDisplayIndex = useMemo(() => {
+    const n = executiveInsightItems.length;
+    if (!n) return 0;
+    return Math.min(Math.max(0, executiveInsightIndex), n - 1);
+  }, [executiveInsightIndex, executiveInsightItems.length]);
+
   const activeExecutiveInsight =
-    executiveInsightItems[executiveInsightIndex] ||
-    companyExecutiveInsights?.company?.active ||
-    null;
+    executiveInsightItems[executiveInsightDisplayIndex] ?? null;
 
   const openPipelineHealthSummary =
     scopedExecutiveInsights?.fieldExecution?.summary || {
@@ -4478,8 +4523,8 @@ useEffect(() => {
       return;
     }
 
-    const cycleMs = 4800;
-    const fillMs = 4200;
+    const cycleMs = 6_000;
+    const fillMs = 4_800;
     const pauseMs = cycleMs - fillMs;
     const tickMs = 40;
 
@@ -5264,7 +5309,7 @@ const productMixDrillRows = useMemo(() => {
                 />
 
                 <MetricCard
-                  label="Closed (QTD)"
+                  label="CLOSED (QTD)"
                   labelTextTransform="none"
                   value={fmtMoneyCompact(companyClosedQTDValue)}
                   footerCompact
@@ -5308,14 +5353,24 @@ const productMixDrillRows = useMemo(() => {
 
                 <MetricCard
                   label="VELOCITY"
-                  value={fmtPct1(companyVelocityValue)}
+                  value={
+                    companyVelocityEligible === false ? "—" : fmtPct1(companyVelocityValue)
+                  }
                   footerCompact
-                  footer={renderCompanyTotalsBlankFooterBand()}
+                  footer={
+                    companyVelocityEligible === false
+                      ? renderVelocityIneligibleFooterBand(data?.dv?.ineligibleReason)
+                      : renderCompanyTotalsBlankFooterBand()
+                  }
                   onClick={() => {
                     rememberFeedbackAnchor({ section: "COMPANY TOTALS", metricCard: "Velocity" });
                     setVelocityDrillOpen(true);
                   }}
-                  title="Click to view Velocity inputs + formula"
+                  title={
+                    companyVelocityEligible === false
+                      ? "Velocity is not meaningful until ~25% of the quarter has elapsed. Click for inputs and formula."
+                      : "Click to view Velocity inputs + formula"
+                  }
                 />
 
                 <MetricCard
@@ -5376,7 +5431,7 @@ const productMixDrillRows = useMemo(() => {
                 teaser={activeExecutiveInsight?.teaser || "Scoped narrative"}
                 onPauseRotation={setExecutiveInsightPaused}
                 progress={executiveInsightProgress}
-                currentIndex={executiveInsightIndex}
+                currentIndex={executiveInsightDisplayIndex}
                 totalCount={executiveInsightItems.length}
                 onPrev={goToPrevExecutiveInsight}
                 onNext={goToNextExecutiveInsight}
@@ -6548,6 +6603,18 @@ const productMixDrillRows = useMemo(() => {
       <KeyboardShortcutsHelpOverlay
         open={keyboardShortcutsHelpOpen}
         onClose={() => setKeyboardShortcutsHelpOpen(false)}
+        onOpenDebugConsole={() => {
+          setKeyboardShortcutsHelpOpen(false);
+          setDebugConsoleOpen((v) => !v);
+        }}
+        onOpenSaltTroubleshootingGuide={() => {
+          setKeyboardShortcutsHelpOpen(false);
+          setSaltRescueOpen(true);
+        }}
+        onOpenArchitectureMap={() => {
+          setKeyboardShortcutsHelpOpen(false);
+          setShowArchitecture(true);
+        }}
       />
 
       <DebugConsoleModal
