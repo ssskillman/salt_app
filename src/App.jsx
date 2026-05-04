@@ -1204,6 +1204,71 @@ const closeButtonStyles = {
   fontSize: 16,
 };
 
+/** Header rail: outer track for business-line toggle + fiscal quarter (same height). */
+const HEADER_SEGMENTED_TRACK_STYLE = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  padding: 4,
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.16)",
+  border: "1px solid rgba(255,255,255,0.22)",
+  backdropFilter: "blur(10px)",
+  boxShadow: "0 8px 20px rgba(0,0,0,0.10)",
+  flexWrap: "nowrap",
+  flexShrink: 0,
+};
+
+const HEADER_SEGMENTED_INNER_SELECTED_STYLE = {
+  fontFamily: "var(--salt-font-sans)",
+  padding: "8px 12px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 950,
+  letterSpacing: 0.2,
+  whiteSpace: "nowrap",
+  background: "rgba(255,255,255,0.96)",
+  color: "rgba(15,23,42,0.92)",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+};
+
+/** Iterable brand: NEON fill + DARK ink (palette guide). */
+const HEADER_QUARTER_NEON_INNER_STYLE = {
+  ...HEADER_SEGMENTED_INNER_SELECTED_STYLE,
+  background: "#D5FF9F",
+  color: "#160F29",
+  border: "1px solid rgba(22, 15, 41, 0.14)",
+  boxShadow: "0 1px 4px rgba(22, 15, 41, 0.08)",
+};
+
+/** Fiscal quarter: same track + inner pill as `BusinessLineToggle` (one segment; identical height). */
+function FiscalQuarterHeaderChip({ label }) {
+  const text = label != null ? String(label).trim() : "";
+  if (!text || text === "—") return null;
+
+  return (
+    <div
+      role="status"
+      title={`Fiscal quarter: ${text}`}
+      style={{
+        ...HEADER_SEGMENTED_TRACK_STYLE,
+        gap: 0,
+      }}
+    >
+      <div
+        style={{
+          ...HEADER_QUARTER_NEON_INNER_STYLE,
+          display: "inline-flex",
+          alignItems: "center",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
 function BusinessLineToggle({ value, onChange }) {
   const options = [
     { label: "All", value: "All" },
@@ -1212,20 +1277,7 @@ function BusinessLineToggle({ value, onChange }) {
   ];
 
   return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: 4,
-        borderRadius: 999,
-        background: "rgba(255,255,255,0.16)",
-        border: "1px solid rgba(255,255,255,0.22)",
-        backdropFilter: "blur(10px)",
-        boxShadow: "0 8px 20px rgba(0,0,0,0.10)",
-        flexWrap: "nowrap",
-      }}
-    >
+    <div style={HEADER_SEGMENTED_TRACK_STYLE}>
       {options.map((option) => {
         const selected = value === option.value;
 
@@ -1239,16 +1291,24 @@ function BusinessLineToggle({ value, onChange }) {
               appearance: "none",
               border: "none",
               cursor: "pointer",
-              padding: "8px 12px",
-              borderRadius: 999,
-              fontSize: 12,
-              fontWeight: 950,
-              letterSpacing: 0.2,
-              whiteSpace: "nowrap",
+              display: "inline-flex",
+              alignItems: "center",
               transition: "all 160ms ease",
-              background: selected ? "rgba(255,255,255,0.96)" : "transparent",
-              color: selected ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.94)",
-              boxShadow: selected ? "0 2px 8px rgba(0,0,0,0.10)" : "none",
+              ...(selected ? HEADER_SEGMENTED_INNER_SELECTED_STYLE : {}),
+              ...(!selected
+                ? {
+                    fontFamily: "var(--salt-font-sans)",
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 950,
+                    letterSpacing: 0.2,
+                    whiteSpace: "nowrap",
+                    background: "transparent",
+                    color: "rgba(255,255,255,0.94)",
+                    boxShadow: "none",
+                  }
+                : {}),
             }}
           >
             {option.label}
@@ -5007,6 +5067,7 @@ const productMixDrillRows = useMemo(() => {
             )}
             <div style={styles.viewPill}>{activePersona} View</div>
             <BusinessLineToggle value={businessLine} onChange={setBusinessLine} />
+            <FiscalQuarterHeaderChip label={feedbackFyqDisplay} />
           </div>
           <div style={styles.headerBottomRight}>
             <button
@@ -6616,6 +6677,8 @@ const styles = {
     color: "white",
     zIndex: 10,
     flexShrink: 0,
+    /* Inherit Sofia Pro stack for controls that don’t set fontFamily (BL toggle, quarter chip). */
+    fontFamily: "var(--salt-font-sans)",
   },
   headerTopRow: {
     display: "grid",
@@ -6722,6 +6785,7 @@ const styles = {
     fontWeight: "var(--salt-type-title-weight)",
     letterSpacing: "-0.02em",
   },
+  /** Persona strip — Iterable brand CORAL (#FFBFAA) + DARK ink. */
   viewPill: {
     fontFamily: "var(--salt-font-sans)",
     fontSize: "var(--salt-type-eyebrow-size)",
@@ -6730,8 +6794,10 @@ const styles = {
     textTransform: "uppercase",
     padding: "6px 10px",
     borderRadius: 999,
-    background: "rgba(255,255,255,0.94)",
-    color: "rgba(15, 23, 42, 0.92)",
+    background: "#FFBFAA",
+    color: "#160F29",
+    border: "1px solid rgba(22, 15, 41, 0.12)",
+    boxShadow: "0 1px 4px rgba(22, 15, 41, 0.06)",
   },
   scrollArea: {
     display: "flex",

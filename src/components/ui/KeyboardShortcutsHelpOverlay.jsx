@@ -330,6 +330,39 @@ export default function KeyboardShortcutsHelpOverlay({ open, onClose }) {
                 ))}
               </div>
             ))}
+
+            <div style={{ marginBottom: 18 }}>
+              <h2 style={kbdSectionTitle}>Brand & typography</h2>
+              <p style={dashIntroBody}>
+                Iterable’s brand typography guide names{" "}
+                <span style={{ color: "rgba(255, 250, 246, 0.92)", fontWeight: 950 }}>Icona Serif</span> as the primary
+                (display) face and{" "}
+                <span style={{ color: "rgba(255, 250, 246, 0.92)", fontWeight: 950 }}>Sofia Pro</span> as the secondary
+                (UI) face. This app maps those roles to CSS variables: display text prefers{" "}
+                <span style={{ fontWeight: 950 }}>Icona Serif → Spectral</span>; UI text prefers{" "}
+                <span style={{ fontWeight: 950 }}>Sofia Pro → Poppins</span> (with system fallbacks). The center{" "}
+                <span style={{ fontWeight: 950 }}>SALT Report</span> title uses the display stack; the header rail
+                (Views, persona, business line, quarter, as‑of pill, buttons) uses the UI stack.
+              </p>
+              <p style={{ ...dashIntroBody, marginBottom: 10 }}>
+                <span style={{ color: "#7dd3c0", fontWeight: 950 }}>Included today:</span> token wiring for Iterable
+                shell, Google Fonts fallbacks (Spectral + Poppins), header inheritance so controls pick up the UI stack,
+                and recent header chips using Iterable palette (e.g. Coral / Neon) where those controls live.
+              </p>
+              <p style={{ ...dashIntroBody, marginBottom: 10 }}>
+                <span style={{ color: "#7dd3c0", fontWeight: 950 }}>Not bundled yet:</span> commercial font files for
+                Icona Serif and Sofia Pro are not shipped in this repo, so browsers will keep using Spectral / Poppins
+                until those faces are installed (e.g. self‑hosted{" "}
+                <span style={{ fontWeight: 950 }}>@font-face</span>, Adobe Fonts, or OS installs). Print / marketing
+                lockup rules from the full brand kit are not reproduced here—only in‑app digital patterns.
+              </p>
+              <p style={{ ...dashIntroBody, marginBottom: 0 }}>
+                <span style={{ color: "#7dd3c0", fontWeight: 950 }}>Next branding steps:</span> add licensed WOFF2
+                (or equivalent) for Sofia Pro + Icona Serif and register them in the app shell; audit any remaining
+                hardcoded <span style={{ fontWeight: 950 }}>font-family</span> strings outside tokens; run a quick pass
+                with Brand on corner radius, weight, and spacing for new chips vs. the PDF scale.
+              </p>
+            </div>
           </div>
 
           <div style={dashboardCol}>
@@ -361,8 +394,9 @@ export default function KeyboardShortcutsHelpOverlay({ open, onClose }) {
         </div>
 
         <p style={footnote}>
-          On Windows and Linux, use Ctrl where this list shows ⌘ (Command). Typography and colors follow the Salt /
-          Iterable in-app shell (mint accent, warm white body, Poppins when loaded).
+          On Windows and Linux, use Ctrl where this list shows ⌘ (Command). Colors and type tokens follow the Salt /
+          Iterable in-app shell (mint accent, warm white surfaces; UI type prefers Sofia Pro → Poppins, display prefers
+          Icona Serif → Spectral until brand fonts are self-hosted).
         </p>
       </div>
     </div>

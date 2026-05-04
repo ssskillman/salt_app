@@ -16,8 +16,8 @@ img.salt-header-logo {
 
 :root {
   --salt-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  /* Display / numbers (Iterable typography guide — Spectral) */
-  --salt-font-display: "Spectral", Georgia, "Times New Roman", serif;
+  /* Display: Iterable guide = Icona Serif (commercial); Spectral = open fallback until licensed). */
+  --salt-font-display: "Icona Serif", "Spectral", Georgia, "Times New Roman", serif;
   --salt-type-title-size: clamp(28px, 3.2vw, 44px);
   --salt-type-title-weight: 600;
   --salt-type-h1-size: 17px;
@@ -81,8 +81,11 @@ img.salt-header-logo {
 }
 
 [data-salt-brand-theme="iterable"] {
-  --salt-font-sans: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+  /* Secondary UI: Iterable guide = Sofia Pro (commercial); Poppins loads from GF as practical fallback. */
+  --salt-font-sans: "Sofia Pro", "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
+
+  --salt-font-display: "Icona Serif", "Spectral", Georgia, "Times New Roman", serif;
 
   --salt-app-shell-bg: linear-gradient(135deg, #005a72 0%, #2c8798 42%, #399d89 100%);
   --salt-loading-bg: #005a72;
@@ -122,7 +125,7 @@ img.salt-header-logo {
   --salt-card-chev-bg: rgba(255, 250, 246, 0.92);
 }
 
-/* Iterable shell: default paragraph / unstyled text = Poppins body */
+/* Iterable shell: body / UI = Sofia Pro stack (Poppins when Sofia Pro is not installed). */
 html[data-salt-brand-theme="iterable"] body,
 html[data-salt-brand-theme="iterable"] #root {
   font-family: var(--salt-font-sans);

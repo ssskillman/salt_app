@@ -24,6 +24,7 @@ export function IconButton({ title, onClick, children, selected = false }) {
         padding: "6px 10px",
         cursor: "pointer",
         color: "rgba(15,23,42,0.78)",
+        fontFamily: "var(--salt-font-sans)",
         fontSize: 13,
         fontWeight: 950,
         display: "inline-flex",
