@@ -54,6 +54,8 @@ img.salt-header-logo {
   --salt-chart-won: #60a5fa;
   --salt-chart-open: #00c2b2;
   --salt-chart-lost: #ff6b6b;
+  /* Horseman stacked segments: subtle edge vs card/surface */
+  --salt-chart-segment-stroke: rgba(255, 255, 255, 0.94);
 
   --salt-delta-pos-color: rgba(16, 120, 87, 0.92);
   --salt-delta-pos-bg: rgba(16, 120, 87, 0.1);
@@ -90,7 +92,16 @@ img.salt-header-logo {
   --salt-app-shell-bg: linear-gradient(135deg, #005a72 0%, #2c8798 42%, #399d89 100%);
   --salt-loading-bg: #005a72;
 
-  --salt-header-meta-dot: #d5ff9f;
+  /* Iterable ’26 brand palette — secondary teals + accents (slides / marketing guide). */
+  --salt-brand-ink: #160f29;
+  --salt-brand-accent-lime: #d5ff9f;
+  --salt-brand-accent-coral: #ffbfaa;
+  --salt-brand-teal-900: #005a72;
+  --salt-brand-teal-700: #2c8798;
+  --salt-brand-teal-600: #399d89;
+  --salt-brand-teal-mint: #96cfae;
+
+  --salt-header-meta-dot: var(--salt-brand-accent-lime);
   --salt-header-meta-dot-shadow: 0 0 0 3px rgba(213, 255, 159, 0.35), 0 0 12px rgba(213, 255, 159, 0.42);
 
   --salt-surface-bg: rgba(255, 250, 246, 0.94);
@@ -101,10 +112,15 @@ img.salt-header-logo {
   --salt-text-muted: rgba(22, 15, 41, 0.72);
   --salt-text-icon: rgba(22, 15, 41, 0.78);
 
-  --salt-chart-won: #2c8798;
-  --salt-chart-open: #399d89;
-  /* Slightly deeper than guideline coral for chart legibility on warm white */
-  --salt-chart-lost: #c24133;
+  /*
+   * Horseman stacks: one hue per outcome from brand accents + secondary teal (avoid two dark teals that read identical).
+   * Won = accent lime (FY quarter chip); Lost = accent coral; Open = medium teal (readable vs lime + coral).
+   */
+  --salt-chart-won: var(--salt-brand-accent-lime);
+  --salt-chart-open: var(--salt-brand-teal-700);
+  --salt-chart-lost: var(--salt-brand-accent-coral);
+  /* Ink-tinted hairline: separates lime/coral/teal on cream cards better than white. */
+  --salt-chart-segment-stroke: rgba(22, 15, 41, 0.2);
 
   --salt-delta-pos-color: rgba(57, 157, 137, 0.98);
   --salt-delta-pos-bg: rgba(150, 207, 174, 0.35);

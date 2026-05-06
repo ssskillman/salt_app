@@ -106,6 +106,7 @@ const CustomTooltip = ({ active, payload, label }) => {
                   height: "8px",
                   borderRadius: "2px",
                   backgroundColor: entry.fill,
+                  boxShadow: "inset 0 0 0 1px rgba(22, 15, 41, 0.2)",
                 }}
               />
               <span style={{ fontWeight: 700 }}>{entry.name}:</span>
@@ -215,6 +216,7 @@ export function HorsemanLegend({ keys }) {
               height: "10px",
               borderRadius: "3px",
               backgroundColor: brand[k],
+              boxShadow: "inset 0 0 0 1px rgba(22, 15, 41, 0.22)",
             }}
           />
           <span
@@ -336,8 +338,8 @@ export default function HorsemanBars({
               stackId="hm"
               fill={brand[k]}
               cursor="pointer"
-              /* Widen very small stacked segments so they stay easy to hit. */
-              minPointSize={8}
+              /* Widen very small stacked segments so they stay easy to hit and see. */
+              minPointSize={12}
               barSize={barSize}
               isAnimationActive={false}
               shape={(p) => {
@@ -367,6 +369,8 @@ export default function HorsemanBars({
                     <Rectangle
                       {...p}
                       radius={radius}
+                      stroke="var(--salt-chart-segment-stroke, rgba(255,255,255,0.94))"
+                      strokeWidth={1}
                       onClick={handleSegmentClick}
                       style={{ cursor: onSegmentClick ? "pointer" : "default" }}
                     />
