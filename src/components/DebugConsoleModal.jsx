@@ -1,6 +1,7 @@
 // src/components/DebugConsoleModal.jsx
 /* eslint-disable react-refresh/only-export-components -- exports mapping helpers alongside the modal */
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import JSON5 from "json5";
 import { client } from "@sigmacomputing/plugin";
 import Modal from "./ui/Modal";
 import { editorConfig } from "../app/editorConfig";
@@ -148,8 +149,27 @@ function extractJsonObjectFromFullExport(full) {
   const brace = s.indexOf("{", startSearch);
   if (brace < 0) return null;
   let depth = 0;
+  let inString = false;
+  let escape = false;
+  let stringQuote = null;
   for (let i = brace; i < s.length; i++) {
     const c = s[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (c === "\\") {
+        escape = true;
+      } else if (c === stringQuote) {
+        inString = false;
+        stringQuote = null;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      stringQuote = c;
+      continue;
+    }
     if (c === "{") depth += 1;
     else if (c === "}") {
       depth -= 1;
@@ -159,29 +179,50 @@ function extractJsonObjectFromFullExport(full) {
   return null;
 }
 
+const BLOCK2_JSON_MARKER = "# --- Block 2: JSON";
+
 /**
  * Parse pasted export JSON into a plain object for `client.config.set()`.
  * Accepts: our export wrapper `{ exportedAt, mappings, workbookOnlyKeys }`, a bare `{ mappings }`,
  * or a flat `{ source_detail: "…", … }`. Omits null/undefined so Sigma does not get empty clears unless intended.
+ * Also accepts JSON5 / JS object-literal style (unquoted keys) and console-style
+ * `mappings: { … }, workbookOnlyKeys: { … }` without an outer `{ … }`.
  */
 export function parseSigmaConfigImportPaste(raw) {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) {
     throw new Error("Paste export JSON first.");
   }
-  let jsonStr = trimmed;
-  if (!trimmed.startsWith("{")) {
-    const extracted = extractJsonObjectFromFullExport(trimmed);
-    if (!extracted) {
-      throw new Error('Could not find JSON. Paste the block starting with "{" (or the full TSV+JSON export).');
-    }
-    jsonStr = extracted;
+  const extractedFromFull = extractJsonObjectFromFullExport(trimmed);
+  const hasBlock2Header = trimmed.includes(BLOCK2_JSON_MARKER);
+
+  let jsonStr;
+  // Prefer Block 2 whenever this is (or contains) our TSV+JSON export — even if someone prefixed
+  // the paste with `{` or other noise, which would otherwise hit `startsWith("{")` and JSON.parse
+  // would fail on `{\n# SALT…` (see “Expected property name or '}' … line 2 column 1”).
+  if (hasBlock2Header && extractedFromFull) {
+    jsonStr = extractedFromFull;
+  } else if (/^\s*[a-zA-Z_$][\w$]*\s*:/.test(trimmed)) {
+    // Console copy often omits the outer `{ … }` and uses unquoted keys; handle before treating the
+    // paste as raw JSON so we do not grab only `mappings`' inner `{…}` via brace-scan from offset 0.
+    jsonStr = `{${trimmed}}`;
+  } else if (trimmed.startsWith("{")) {
+    jsonStr = trimmed;
+  } else if (extractedFromFull) {
+    jsonStr = extractedFromFull;
+  } else {
+    throw new Error('Could not find JSON. Paste the block starting with "{" (or the full TSV+JSON export).');
   }
   let parsed;
   try {
     parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    throw new Error(`Invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  } catch {
+    try {
+      parsed = JSON5.parse(jsonStr);
+    } catch (e5) {
+      const msg = e5 instanceof Error ? e5.message : String(e5);
+      throw new Error(`Invalid JSON: ${msg}`);
+    }
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("JSON root must be an object.");
@@ -1636,16 +1677,17 @@ function Table({ columns, rows }) {
         >
           <div style={cardLabel}>Apply saved mappings into Sigma</div>
           <div style={cardHint}>
-            Paste JSON from an export (just the <code>mappings</code> block is fine, or the whole TSV+JSON blob — we
-            locate Block 2). Uses Sigma's <code>client.config.set()</code> shallow merge. Requires edit access
-            (Explorer / author); viewers are often read-only. Only apply exports you trust.
+            Paste JSON from an export (strict JSON or JS-style keys like <code>mappings: {'{'}</code>— just the{" "}
+            <code>mappings</code> block is fine, or the whole TSV+JSON blob — we locate Block 2). Uses Sigma's{" "}
+            <code>client.config.set()</code> shallow merge. Requires edit access (Explorer / author); viewers are often
+            read-only. Only apply exports you trust.
           </div>
           <textarea
             value={configImportPaste}
             onChange={(e) => setConfigImportPaste(e.target.value)}
             rows={6}
             spellCheck={false}
-            placeholder='{"exportedAt":"…","mappings":{"source_detail":"…"}}'
+            placeholder='{"mappings":{…}} or mappings: { … }, workbookOnlyKeys: { … }'
             style={{
               marginTop: 8,
               width: "100%",
