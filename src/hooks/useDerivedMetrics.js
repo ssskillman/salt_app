@@ -22,12 +22,20 @@ function countWhere(rows, predicate) {
   return rows.reduce((sum, row) => sum + (predicate(row) ? 1 : 0), 0);
 }
 
+function normalizeHealthReviewText(text) {
+  return String(text ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function getHealthBucketFromReview(text) {
-  const s = String(text ?? "").trim().toLowerCase();
+  const s = normalizeHealthReviewText(text);
   if (!s) return "unknown";
   if (s.includes("healthy")) return "healthy";
-  if (s.includes("needs attention")) return "needs_attention";
-  if (s.includes("at risk")) return "at_risk";
+  if (s.includes("needs attention") || s.includes("needs attn")) return "needs_attention";
+  if (s.includes("at risk") || s.includes("at-risk")) return "at_risk";
   return "unknown";
 }
 

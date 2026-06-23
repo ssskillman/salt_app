@@ -371,8 +371,8 @@ function getReviewRiskBucket(shortText) {
 
   if (!s) return "unknown";
   if (s.includes("healthy")) return "healthy";
-  if (s.includes("needs attention")) return "needs_attention";
-  if (s.includes("at risk")) return "at_risk";
+  if (s.includes("needs attention") || s.includes("needs attn")) return "needs_attention";
+  if (s.includes("at risk") || s.includes("at-risk")) return "at_risk";
   return "unknown";
 }
 
@@ -490,7 +490,6 @@ export default function OpenPipelineDrillModal({
    * user can change via header toggles without closing.
    */
   const [healthFilter, setHealthFilter] = useState("all");
-  const wasOpenRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -501,18 +500,17 @@ export default function OpenPipelineDrillModal({
     }
   }, [open, amountField]);
 
+  /** Keep drill filter aligned with how the modal was opened (metric card = all; health banner = bucket key). */
   useEffect(() => {
-    if (open && !wasOpenRef.current) {
-      const fromEntry =
-        selectedRisk === "needs_attention" ||
-        selectedRisk === "at_risk" ||
-        selectedRisk === "healthy" ||
-        selectedRisk === "unknown"
-          ? selectedRisk
-          : "all";
-      setHealthFilter(fromEntry);
-    }
-    wasOpenRef.current = open;
+    if (!open) return;
+    const fromEntry =
+      selectedRisk === "needs_attention" ||
+      selectedRisk === "at_risk" ||
+      selectedRisk === "healthy" ||
+      selectedRisk === "unknown"
+        ? selectedRisk
+        : "all";
+    setHealthFilter(fromEntry);
   }, [open, selectedRisk]);
 
   useEffect(() => {

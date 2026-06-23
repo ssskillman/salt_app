@@ -71,7 +71,6 @@ export const editorConfig = [
 
   // Additional AE flags
   { name: "ae_is_at_0_acv", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Is AE At 0 ACV (0/1)" },
-  { name: "ae_is_at_0_arr", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Is AE At 0 ARR (0/1)" },
   { name: "ae_is_over_stage4_cov_threshold_3x", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Is AE Over Stage 4 Coverage Threshold 3x (0/1)" },
 
   // Row identity / context
@@ -84,7 +83,6 @@ export const editorConfig = [
 
   // Detail metrics for drill modal
   { name: "ae_quota", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Quota" },
-  { name: "ae_stage4_pipeline_non_negative", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Stage 4 Plus Pipeline Non Negative" },
   { name: "ae_stage4_coverage_non_negative", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Stage 4 Plus Coverage Non Negative" },
   { name: "ae_booked_acv", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Booked ACV" },
   { name: "ae_closed_won_opp_count", type: "column", source: "source_ae_performance", label: "CEO · AE Performance · Closed Won Opp Count" },

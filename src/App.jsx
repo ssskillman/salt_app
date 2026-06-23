@@ -423,15 +423,19 @@ function daysUntilDate(value) {
 }
 
 function normalizeReviewText(text) {
-  return String(text ?? "").trim().toLowerCase();
+  return String(text ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function getHealthBucketFromReview(text) {
   const s = normalizeReviewText(text);
   if (!s) return "unknown";
   if (s.includes("healthy")) return "healthy";
-  if (s.includes("needs attention")) return "needs_attention";
-  if (s.includes("at risk")) return "at_risk";
+  if (s.includes("needs attention") || s.includes("needs attn")) return "needs_attention";
+  if (s.includes("at risk") || s.includes("at-risk")) return "at_risk";
   return "unknown";
 }
 
@@ -2777,11 +2781,20 @@ const companyTotalsDerivedMetricsSpineRows = useMemo(() => {
     return [];
   }
 
+  const spine = rows?.employeeScopeOpportunitySpine || [];
+
   const stageKey = resolveColumnKey(config?.eso_stage);
   const closeKey = resolveColumnKey(config?.eso_close);
   const businessLineKey = resolveColumnKey(config?.eso_bl);
   const largeDealBucketKey = resolveColumnKey(config?.eso_ld_bucket);
-  const dealReviewShortKey = resolveColumnKey(config?.eso_deal_review);
+  const dealReviewShortKey =
+    resolveColumnKey(config?.eso_deal_review) ||
+    findRowKeyByCandidates(spine, [
+      "deal_review_short",
+      "Deal Review Short",
+      "deal_review",
+      "Deal Review",
+    ]);
 
   return companyTotalsSpineRows.map((r) => ({
     opp_owner_name: companyTotalsSpineKeys.owner
@@ -2806,6 +2819,7 @@ const companyTotalsDerivedMetricsSpineRows = useMemo(() => {
   companyTotalsSpineRows,
   companyTotalsSpineKeys,
   config,
+  rows?.employeeScopeOpportunitySpine,
 ]);
 
 const companyTotalsDerivedMetrics = useDerivedMetrics({
@@ -3222,48 +3236,6 @@ const scopedClosedLostPipelineDrillRows = useMemo(() => {
   rows?.employeeScopeOpportunitySpine,
 ]);
 
-const scopedDerivedMetricsSpineRows = useMemo(() => {
-  if (!Array.isArray(scopedFieldExecutionSpineRows) || scopedFieldExecutionSpineRows.length === 0) {
-    return [];
-  }
-
-  const stageKey = resolveColumnKey(config?.eso_stage);
-  const closeKey = resolveColumnKey(config?.eso_close);
-  const businessLineKey = resolveColumnKey(config?.eso_bl);
-  const largeDealBucketKey = resolveColumnKey(config?.eso_ld_bucket);
-  const dealReviewShortKey = resolveColumnKey(config?.eso_deal_review);
-
-  return scopedFieldExecutionSpineRows.map((r) => ({
-    opp_owner_name: scopedFieldExecutionSpineKeys.owner
-      ? r?.[scopedFieldExecutionSpineKeys.owner] ?? null
-      : null,
-
-    open_pipeline_acv: scopedFieldExecutionSpineKeys.openPipe
-      ? r?.[scopedFieldExecutionSpineKeys.openPipe] ?? null
-      : null,
-
-    closed_acv: scopedFieldExecutionSpineKeys.closed
-      ? r?.[scopedFieldExecutionSpineKeys.closed] ?? null
-      : null,
-
-    stage_name: stageKey ? r?.[stageKey] ?? null : null,
-    close_date: closeKey ? r?.[closeKey] ?? null : null,
-    business_line: businessLineKey ? r?.[businessLineKey] ?? null : null,
-    large_deal_bucket: largeDealBucketKey ? r?.[largeDealBucketKey] ?? null : null,
-    deal_review_short: dealReviewShortKey ? r?.[dealReviewShortKey] ?? null : null,
-  }));
-}, [
-  scopedFieldExecutionSpineRows,
-  scopedFieldExecutionSpineKeys,
-  config,
-]);
-
-const derivedMetrics = useDerivedMetrics({
-  spineRows: scopedDerivedMetricsSpineRows,
-  forecastAmount: scopedForecastValue,
-});
-
-
 const openOpenPipelineDrillForRisk = (riskKey = "all") => {
   const label =
     riskKey === "all"
@@ -3316,6 +3288,88 @@ const scopedFieldExecution = useMemo(() => {
   scopedFieldExecutionSpineKeys,
   scopedForecastValue,
 ]);
+
+const fieldExecutionInsightItems = useMemo(() => {
+  const openPipeKey = scopedFieldExecutionSpineKeys.openPipe;
+  const pipeTotal = scopedFieldExecution.pipe;
+  if (pipeTotal <= 0 || !openPipeKey) return [];
+
+  const spine = rows?.employeeScopeOpportunitySpine || [];
+  const dealReviewShortKey =
+    resolveColumnKey(config?.eso_deal_review) ||
+    findRowKeyByCandidates(spine, [
+      "deal_review_short",
+      "Deal Review Short",
+      "deal_review",
+      "Deal Review",
+    ]);
+
+  const healthBuckets = {
+    healthy: { count: 0, amount: 0 },
+    needs_attention: { count: 0, amount: 0 },
+    at_risk: { count: 0, amount: 0 },
+  };
+
+  for (const r of scopedFieldExecutionSpineRows) {
+    const amount = toNumber(r?.[openPipeKey]) || 0;
+    if (amount <= 0) continue;
+
+    const reviewRaw = dealReviewShortKey ? r?.[dealReviewShortKey] ?? null : null;
+    const bucket = getHealthBucketFromReview(reviewRaw);
+
+    if (bucket === "healthy") {
+      healthBuckets.healthy.count += 1;
+      healthBuckets.healthy.amount += amount;
+    } else if (bucket === "needs_attention") {
+      healthBuckets.needs_attention.count += 1;
+      healthBuckets.needs_attention.amount += amount;
+    } else if (bucket === "at_risk") {
+      healthBuckets.at_risk.count += 1;
+      healthBuckets.at_risk.amount += amount;
+    }
+  }
+
+  const pct = (amt) => (pipeTotal > 0 ? amt / pipeTotal : 0);
+
+  return [
+    {
+      key: "healthy",
+      label: "Healthy",
+      color: "#2563eb",
+      count: healthBuckets.healthy.count,
+      amount: healthBuckets.healthy.amount,
+      pct: pct(healthBuckets.healthy.amount),
+    },
+    {
+      key: "needs_attention",
+      label: "Needs Attention",
+      color: "#d97706",
+      count: healthBuckets.needs_attention.count,
+      amount: healthBuckets.needs_attention.amount,
+      pct: pct(healthBuckets.needs_attention.amount),
+    },
+    {
+      key: "at_risk",
+      label: "At Risk",
+      color: "#c026d3",
+      count: healthBuckets.at_risk.count,
+      amount: healthBuckets.at_risk.amount,
+      pct: pct(healthBuckets.at_risk.amount),
+    },
+  ];
+}, [
+  scopedFieldExecution.pipe,
+  scopedFieldExecutionSpineRows,
+  scopedFieldExecutionSpineKeys,
+  config?.eso_deal_review,
+  rows?.employeeScopeOpportunitySpine,
+]);
+
+const currentFieldExecutionInsight = useMemo(() => {
+  const active =
+    fieldExecutionInsightItems.find((x) => x.count > 0) || fieldExecutionInsightItems[0] || null;
+  return fieldExecutionInsightItems[fieldExecutionInsightIndex] || active || null;
+}, [fieldExecutionInsightItems, fieldExecutionInsightIndex]);
 
   useEffect(() => {
     if (!debugLoggingEnabled) return;
@@ -4429,22 +4483,9 @@ useEffect(() => {
     largeDealsDrillMetric,
   ]);
 
-  const executiveInsights = useExecutiveInsights({
-    derivedMetrics,
-  });
-
-  const scopedDerivedMetrics = useDerivedMetrics({
-    spineRows: scopedDerivedMetricsSpineRows,
-    forecastAmount: scopedForecastValue,
-  });
-
   const companyExecutiveInsights = useExecutiveInsights({
     derivedMetrics: companyTotalsDerivedMetrics,
     shuffleNonce: executiveInsightShuffleNonce,
-  });
-
-  const scopedExecutiveInsights = useExecutiveInsights({
-    derivedMetrics: scopedDerivedMetrics,
   });
 
   const executiveInsightItems = useMemo(() => {
@@ -4460,34 +4501,20 @@ useEffect(() => {
   const activeExecutiveInsight =
     executiveInsightItems[executiveInsightDisplayIndex] ?? null;
 
-  const openPipelineHealthSummary =
-    scopedExecutiveInsights?.fieldExecution?.summary || {
-      totalAmount: 0,
-      items: [],
-    };
+  useEffect(() => {
+    if (fieldExecutionInsightPaused) return;
+    if (!fieldExecutionInsightItems.length) return;
 
-  const fieldExecutionInsightItems =
-    scopedExecutiveInsights?.fieldExecution?.items || [];
+    const t = setInterval(() => {
+      setFieldExecutionInsightIndex((prev) => (prev + 1) % fieldExecutionInsightItems.length);
+    }, 4000);
 
-  const currentFieldExecutionInsight =
-    fieldExecutionInsightItems[fieldExecutionInsightIndex] ||
-    scopedExecutiveInsights?.fieldExecution?.active ||
-    null;
+    return () => clearInterval(t);
+  }, [fieldExecutionInsightPaused, fieldExecutionInsightItems.length]);
 
-    useEffect(() => {
-      if (fieldExecutionInsightPaused) return;
-      if (!fieldExecutionInsightItems.length) return;
-
-      const t = setInterval(() => {
-        setFieldExecutionInsightIndex((prev) => (prev + 1) % fieldExecutionInsightItems.length);
-      }, 4000);
-
-      return () => clearInterval(t);
-    }, [fieldExecutionInsightPaused, fieldExecutionInsightItems.length]);
-
-    useEffect(() => {
-      setFieldExecutionInsightIndex(0);
-    }, [fieldExecutionInsightItems.length]);
+  useEffect(() => {
+    setFieldExecutionInsightIndex(0);
+  }, [fieldExecutionInsightItems.length]);
 
   const goToPrevExecutiveInsight = () => {
     if (!executiveInsightItems.length) return;
@@ -5849,6 +5876,12 @@ const productMixDrillRows = useMemo(() => {
                     role="button"
                     tabIndex={0}
                     onClick={() => openOpenPipelineDrillForRisk(currentFieldExecutionInsight.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openOpenPipelineDrillForRisk(currentFieldExecutionInsight.key);
+                      }
+                    }}
                     onMouseEnter={() => setFieldExecutionInsightPaused(true)}
                     onMouseLeave={() => setFieldExecutionInsightPaused(false)}
                     title={`Open ${currentFieldExecutionInsight.label} pipeline deals`}
@@ -6406,7 +6439,10 @@ const productMixDrillRows = useMemo(() => {
 
       <OpenPipelineDrillModal
         open={openPipelineDrillOpen}
-        onClose={() => setOpenPipelineDrillOpen(false)}
+        onClose={() => {
+          setOpenPipelineDrillOpen(false);
+          setOpenPipelineSelectedRisk("all");
+        }}
         title="Open Pipeline (Scoped)"
         rows={scopedOpenPipelineDrillRows}
         fieldScopeIsGlobal={fieldScopeBridge?.isGlobal ?? true}

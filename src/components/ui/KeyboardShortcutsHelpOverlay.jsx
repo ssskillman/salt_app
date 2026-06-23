@@ -1,5 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { DEFINITIONS, VIEW_SUMMARIES } from "../../utils/definitions.js";
+import HelpEmbeddedMarkdown from "./HelpEmbeddedMarkdown.jsx";
+import readmeOnboarding from "../../../README.md?raw";
+import readmeAllJsx from "../../../readme_all_jsx_overview.md?raw";
 
 /** Same section order as `DefinitionsDrawer` → `PERSONA_MAP.view_ceo`. */
 const CEO_VIEW_SECTION_KEYS = [
@@ -65,6 +68,12 @@ function firstSentence(text, maxLen = 220) {
   return `${chunk.slice(0, maxLen - 1)}…`;
 }
 
+const DOC_TABS = [
+  { id: "help", label: "Shortcuts & sections" },
+  { id: "readme", label: "README — onboarding" },
+  { id: "jsx", label: "README — all JSX files" },
+];
+
 export default function KeyboardShortcutsHelpOverlay({
   open,
   onClose,
@@ -72,6 +81,8 @@ export default function KeyboardShortcutsHelpOverlay({
   onOpenSaltTroubleshootingGuide,
   onOpenArchitectureMap,
 }) {
+  const [docTab, setDocTab] = useState("help");
+
   const devActionHandlers = {
     debugConsole: onOpenDebugConsole,
     saltTroubleshooting: onOpenSaltTroubleshootingGuide,
@@ -104,6 +115,42 @@ export default function KeyboardShortcutsHelpOverlay({
   }, []);
 
   if (!open) return null;
+
+  const tabStrip = {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 18,
+    flexShrink: 0,
+  };
+
+  const tabBtnBase = {
+    borderRadius: 10,
+    padding: "8px 14px",
+    fontSize: 12,
+    fontWeight: 950,
+    letterSpacing: "0.03em",
+    cursor: "pointer",
+    border: "1px solid rgba(89, 193, 167, 0.35)",
+    background: "rgba(8, 12, 18, 0.45)",
+    color: "rgba(255, 250, 246, 0.82)",
+  };
+
+  const tabBtnActive = {
+    ...tabBtnBase,
+    borderColor: "rgba(125, 211, 192, 0.65)",
+    background: "rgba(89, 193, 167, 0.18)",
+    color: "rgba(255, 250, 246, 0.98)",
+    boxShadow: "0 0 0 1px rgba(89, 193, 167, 0.25) inset",
+  };
+
+  const docsScroll = {
+    flex: 1,
+    minHeight: 0,
+    overflow: "auto",
+    paddingRight: 4,
+    paddingBottom: 8,
+  };
 
   const backdrop = {
     position: "fixed",
@@ -351,13 +398,30 @@ export default function KeyboardShortcutsHelpOverlay({
       <div style={panel}>
         <div style={headerRow}>
           <h1 id="kbd-shortcuts-title" style={titleStyle}>
-            Keyboard shortcuts
+            Help
           </h1>
           <button type="button" style={closeLink} onClick={onClose}>
             Close
           </button>
         </div>
 
+        <div style={tabStrip} role="tablist" aria-label="Help content">
+          {DOC_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={docTab === t.id}
+              id={`help-tab-${t.id}`}
+              style={docTab === t.id ? tabBtnActive : tabBtnBase}
+              onClick={() => setDocTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {docTab === "help" ? (
         <div style={mainGrid}>
           <div style={shortcutsCol}>
             {SHORTCUT_GROUPS.map((sec) => (
@@ -464,6 +528,30 @@ export default function KeyboardShortcutsHelpOverlay({
             ))}
           </div>
         </div>
+        ) : (
+          <div style={docsScroll} role="tabpanel" aria-labelledby={`help-tab-${docTab}`}>
+            {docTab === "readme" && (
+              <>
+                <p style={{ ...dashIntroBody, marginBottom: 14 }}>
+                  <span style={{ color: "#7dd3c0", fontWeight: 950 }}>Bundled from repo:</span>{" "}
+                  <code style={{ color: "#d5ff9f" }}>README.md</code> at build time. Same content as in Git—useful when
+                  embedded in Sigma without the repo handy.
+                </p>
+                <HelpEmbeddedMarkdown markdown={readmeOnboarding} />
+              </>
+            )}
+            {docTab === "jsx" && (
+              <>
+                <p style={{ ...dashIntroBody, marginBottom: 14 }}>
+                  <span style={{ color: "#7dd3c0", fontWeight: 950 }}>Bundled from repo:</span>{" "}
+                  <code style={{ color: "#d5ff9f" }}>readme_all_jsx_overview.md</code> plus static assets under{" "}
+                  <code style={{ color: "#d5ff9f" }}>public/help/</code> (e.g. ecosystem diagram PNG).
+                </p>
+                <HelpEmbeddedMarkdown markdown={readmeAllJsx} />
+              </>
+            )}
+          </div>
+        )}
 
         <p style={footnote}>
           On Windows and Linux, use Ctrl where this list shows ⌘ (Command). Colors and type tokens follow the Salt /

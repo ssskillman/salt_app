@@ -156,6 +156,24 @@ function shuffleArrayInPlace(arr) {
   return arr;
 }
 
+/** Strip tags so values like `<span>Needs Attention</span>` classify like the open-pipeline drill. */
+function reviewTextForHealthBucket(value) {
+  return String(value ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function healthBucketFromReviewShort(value) {
+  const s = reviewTextForHealthBucket(value);
+  if (!s) return "unknown";
+  if (s.includes("healthy")) return "healthy";
+  if (s.includes("needs attention") || s.includes("needs attn")) return "needs_attention";
+  if (s.includes("at risk") || s.includes("at-risk")) return "at_risk";
+  return "unknown";
+}
+
 export function useExecutiveInsights({ derivedMetrics, shuffleNonce = 0 }) {
   const snap = readExecutiveInsightSnapshot(derivedMetrics);
 
@@ -513,15 +531,14 @@ export function useExecutiveInsights({ derivedMetrics, shuffleNonce = 0 }) {
       const amount = toNumber(r?.open_pipeline_acv) || 0;
       if (amount <= 0) return;
 
-      const txt = String(r?.deal_review_short ?? "").toLowerCase();
-
-      if (txt.includes("healthy")) {
+      const bucket = healthBucketFromReviewShort(r?.deal_review_short);
+      if (bucket === "healthy") {
         healthBuckets.healthy.count += 1;
         healthBuckets.healthy.amount += amount;
-      } else if (txt.includes("needs attention")) {
+      } else if (bucket === "needs_attention") {
         healthBuckets.needs_attention.count += 1;
         healthBuckets.needs_attention.amount += amount;
-      } else if (txt.includes("at risk")) {
+      } else if (bucket === "at_risk") {
         healthBuckets.at_risk.count += 1;
         healthBuckets.at_risk.amount += amount;
       }
@@ -529,35 +546,26 @@ export function useExecutiveInsights({ derivedMetrics, shuffleNonce = 0 }) {
 
     const pct = (amt) => (openPipeAmount > 0 ? amt / openPipeAmount : 0);
 
-    const fieldItemsRaw = [
-      {
-        key: "healthy",
-        label: "Healthy",
-        count: healthBuckets.healthy.count,
-        amount: healthBuckets.healthy.amount,
-        pct: pct(healthBuckets.healthy.amount),
-        color: "#2563eb",
-      },
-      {
-        key: "needs_attention",
-        label: "Needs Attention",
-        count: healthBuckets.needs_attention.count,
-        amount: healthBuckets.needs_attention.amount,
-        pct: pct(healthBuckets.needs_attention.amount),
-        color: "#d97706",
-      },
-      {
-        key: "at_risk",
-        label: "At Risk",
-        count: healthBuckets.at_risk.count,
-        amount: healthBuckets.at_risk.amount,
-        pct: pct(healthBuckets.at_risk.amount),
-        color: "#c026d3",
-      },
+    const fieldTemplate = [
+      { key: "healthy", label: "Healthy", color: "#2563eb" },
+      { key: "needs_attention", label: "Needs Attention", color: "#d97706" },
+      { key: "at_risk", label: "At Risk", color: "#c026d3" },
     ];
 
-    const fieldItems = fieldItemsRaw.filter((item) => item.count > 0);
-    const fieldActive = fieldItems[0] || null;
+    const fieldItems =
+      openPipeAmount > 0
+        ? fieldTemplate.map((t) => {
+            const b = healthBuckets[t.key];
+            return {
+              ...t,
+              count: b.count,
+              amount: b.amount,
+              pct: pct(b.amount),
+            };
+          })
+        : [];
+
+    const fieldActive = fieldItems.find((x) => x.count > 0) || fieldItems[0] || null;
 
     return {
       company: {
