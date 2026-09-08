@@ -102,3 +102,5 @@ You may see large backup copies of `App.jsx` or alternate `editorConfig_*` files
 3. Pick one small UI change in **`App.jsx`** or extract a subcomponent under **`src/components/`** to learn import patterns and styling (RSuite, PrimeReact, ECharts/Recharts, Framer Motion are all in play—follow existing usage).
 
 Welcome aboard — LFG.
+
+<!-- CI/CD pipeline verification: 2026-07-02T18:03:01Z -->

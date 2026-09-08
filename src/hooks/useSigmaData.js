@@ -7,6 +7,7 @@ import { debugLog, debugWarn, debugError, isDebugEnabled } from "../utils/debug"
 import { zipColumnarToRows, aePerformanceRowSaltTrueZeroAcv } from "../utils/data.jsx";
 import { toNumber } from "../utils/formatters.jsx";
 import { editorConfig } from "../app/editorConfig";
+import { mergeBoardForecastJsonRow } from "../ceo/boardForecastCompare.js";
 
 /**
  * Some Sigma elements can return "columnar" objects instead of row arrays.
@@ -517,6 +518,69 @@ function buildCreateCloseYoyPayloadMergedRow(row, colsMeta, config) {
   return Object.keys(merged).length ? merged : null;
 }
 
+function asColumnId(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "object") return value.id ?? value.value ?? value.key ?? null;
+  return String(value);
+}
+
+function normalizeBoardForecastRows(rowsArr, colsMeta, configuredPayload) {
+  if (!Array.isArray(rowsArr) || rowsArr.length === 0) return [];
+
+  const payloadKey = findResolvedKeyByCandidates(rowsArr, colsMeta, [
+    asColumnId(configuredPayload),
+    "BOARD_FORECAST_JSON",
+    "board_forecast_payload",
+    "Board Forecast Json",
+  ].filter(Boolean));
+
+  const flattened = rowsArr.map((row) => mergeBoardForecastJsonRow(row, payloadKey));
+
+  const keys = {
+    fiscalYearquarter: findResolvedKeyByCandidates(flattened, colsMeta, [
+      "fiscal_yearquarter",
+      "FISCAL_YEARQUARTER",
+      "Fiscal Yearquarter",
+    ]),
+    businessLine: findResolvedKeyByCandidates(flattened, colsMeta, [
+      "business_line",
+      "BUSINESS_LINE",
+      "Business Line",
+    ]),
+    userAccess: findResolvedKeyByCandidates(flattened, colsMeta, ["user_access", "USER_ACCESS", "User Access"]),
+    securedArr: findResolvedKeyByCandidates(flattened, colsMeta, [
+      "SECURED_BOARD_FORECAST_ARR",
+      "Secured Board Forecast ARR",
+    ]),
+    securedAcv: findResolvedKeyByCandidates(flattened, colsMeta, [
+      "SECURED_BOARD_FORECAST_ACV",
+      "Secured Board Forecast ACV",
+    ]),
+    arr: findResolvedKeyByCandidates(flattened, colsMeta, [
+      "board_forecast_arr",
+      "BOARD_FORECAST_ARR",
+      "Board Forecast ARR",
+    ]),
+    acv: findResolvedKeyByCandidates(flattened, colsMeta, [
+      "board_forecast_acv",
+      "BOARD_FORECAST_ACV",
+      "Board Forecast ACV",
+    ]),
+  };
+
+  if (!keys.fiscalYearquarter || !keys.businessLine) return [];
+
+  return flattened.map((row) => ({
+    fiscal_yearquarter: row?.[keys.fiscalYearquarter] ?? null,
+    business_line: row?.[keys.businessLine] ?? null,
+    user_access: keys.userAccess ? row?.[keys.userAccess] : null,
+    secured_board_forecast_arr: keys.securedArr ? row?.[keys.securedArr] : null,
+    secured_board_forecast_acv: keys.securedAcv ? row?.[keys.securedAcv] : null,
+    board_forecast_arr: keys.arr ? row?.[keys.arr] : null,
+    board_forecast_acv: keys.acv ? row?.[keys.acv] : null,
+  }));
+}
+
 function findResolvedKeyByCandidates(rowsArr, colsMeta, candidates = []) {
   if (!Array.isArray(rowsArr) || rowsArr.length === 0 || !Array.isArray(candidates) || candidates.length === 0) {
     return null;
@@ -991,6 +1055,7 @@ export function useSigmaData(params = {}) {
     detail: config?.source_detail,
     company: config?.source_company,
     budget: config?.source_budget,
+    boardForecast: config?.source_board_forecast,
     horseman: config?.source_horseman,
     horsemanDetail: config?.source_horseman_detail,
     rollup: config?.rollup_source,
@@ -1040,6 +1105,7 @@ export function useSigmaData(params = {}) {
     detail: useElementData(asElementId(sources.detail)),
     company: useElementData(asElementId(sources.company)),
     budget: useElementData(asElementId(sources.budget)),
+    boardForecast: useElementData(asElementId(sources.boardForecast)),
     horseman: useElementData(asElementId(sources.horseman)),
     horsemanDetail: useElementData(asElementId(sources.horsemanDetail)),
     rollup: useElementData(asElementId(sources.rollup)),
@@ -1088,6 +1154,7 @@ export function useSigmaData(params = {}) {
   const colsDetail = useElementColumns(asElementId(sources.detail));
   const colsCompany = useElementColumns(asElementId(sources.company));
   const colsBudget = useElementColumns(asElementId(sources.budget));
+  const colsBoardForecast = useElementColumns(asElementId(sources.boardForecast));
   const colsHorseman = useElementColumns(asElementId(sources.horseman));
   const colsHorsemanDetail = useElementColumns(asElementId(sources.horsemanDetail));
   const colsRollup = useElementColumns(asElementId(sources.rollup));
@@ -1133,6 +1200,7 @@ export function useSigmaData(params = {}) {
       detail: colsDetail,
       company: colsCompany,
       budget: colsBudget,
+      boardForecast: colsBoardForecast,
       horseman: colsHorseman,
       horsemanDetail: colsHorsemanDetail,
       rollup: colsRollup,
@@ -1176,6 +1244,7 @@ export function useSigmaData(params = {}) {
       colsDetail,
       colsCompany,
       colsBudget,
+      colsBoardForecast,
       colsHorseman,
       colsHorsemanDetail,
       colsRollup,
@@ -1230,6 +1299,11 @@ export function useSigmaData(params = {}) {
       detail: processRows(sources.detail, raw.detail),
       company: processRows(sources.company, raw.company),
       budget: processRows(sources.budget, raw.budget),
+      boardForecast: normalizeBoardForecastRows(
+        processRows(sources.boardForecast, raw.boardForecast),
+        columns.boardForecast,
+        config?.board_forecast_payload
+      ),
       horseman: processRows(sources.horseman, raw.horseman),
       horsemanDetail: processRows(sources.horsemanDetail, raw.horsemanDetail),
       rollup: processRows(sources.rollup, raw.rollup),
@@ -1273,7 +1347,7 @@ export function useSigmaData(params = {}) {
 
       drillForecastAttainmentPayload: processRows(sources.drillForecastAttainmentPayload,rawDrillForecastAttainmentPayload),
     }),
-    [raw, sources]
+    [raw, sources, columns, config]
   );
 
   debugLog("PY rows length:", rows.largeDealsPyPayload?.length);
@@ -2876,6 +2950,7 @@ const {
     const sourcesByDataset = {
       detail: sources.detail ?? null,
       company: sources.company ?? null,
+      boardForecast: sources.boardForecast ?? null,
       horseman: sources.horseman ?? null,
       horsemanDetail: sources.horsemanDetail ?? null,
       rollup: sources.rollup ?? null,
@@ -2903,6 +2978,7 @@ const {
     const rowCounts = {
       detail: safeLen(rows.detail),
       company: safeLen(rows.company),
+      boardForecast: safeLen(rows.boardForecast),
       horseman: safeLen(rows.horseman),
       horsemanDetail: safeLen(rows.horsemanDetail),
       rollup: safeLen(rows.rollup),
@@ -2934,6 +3010,7 @@ const {
       firstRowKeys: {
         detail: firstKeys(rows.detail),
         company: firstKeys(rows.company),
+        boardForecast: firstKeys(rows.boardForecast),
         drillVelocity: firstKeys(rows.drillVelocity),
         drillFunded: firstKeys(rows.drillFunded),
         largeDealsDetail: firstKeys(rows.largeDealsDetail),
@@ -3008,6 +3085,7 @@ const {
     !raw.detail ||
     (sources.company && !raw.company) ||
     (sources.budget && !raw.budget) ||
+    (sources.boardForecast && !raw.boardForecast) ||
     (sources.pgPacing && !raw.pgPacing) ||
     (sources.cfoTreemap && !raw.cfoTreemap) ||
     (sources.cfoTreemapDetail && !raw.cfoTreemapDetail) ||

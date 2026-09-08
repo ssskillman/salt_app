@@ -33,6 +33,7 @@ export default function SegToggle({ value, options, onChange, direction = "row" 
   );
 }
 
+/** Match Horseman `PillMultiSelect` chip footprint (6×12 / 12px / 800). */
 const styles = {
   container: {
     display: "inline-flex",
@@ -47,9 +48,9 @@ const styles = {
     appearance: "none",
     border: "none",
     cursor: "pointer",
-    padding: "6px 10px",
-    fontSize: "11px",
-    fontWeight: 950,
+    padding: "6px 12px",
+    fontSize: "12px",
+    fontWeight: 800,
     letterSpacing: "0.3px",
     borderRadius: "999px",
     transition: "all 0.2s ease",

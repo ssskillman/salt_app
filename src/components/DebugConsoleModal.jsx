@@ -523,7 +523,8 @@ const MAPPING_SECTIONS = [
     sourceKey: "source_waterfall",
     fields: [
       ["Step", "wf_name"],
-      ["Amount", "wf_amount"],
+      ["Amount ACV", "wf_amount"],
+      ["Amount ARR (optional)", "wf_amount_arr"],
       ["Opp Name", "wf_opp_name"],
       ["Opp Owner", "wf_opp_owner"],
       ["Business Line", "wf_business_line"],

@@ -119,6 +119,11 @@ export default function MetricCard({
    */
   footerCompact = false,
   isWip = false,
+  /**
+   * Click-to-compare selection: "anchor" (Board / teal) or "second" (Budget|Sales / navy).
+   * null = default card chrome.
+   */
+  selectionRing = null,
 }) {
   const [hover, setHover] = useState(false);
   const [expanded, setExpanded] = useState(!!defaultExpanded);
@@ -126,6 +131,7 @@ export default function MetricCard({
 
   const hasExpand = Array.isArray(expandRows) && expandRows.length > 0;
   const footerHeroLayout = Boolean(footer) && !footerCompact;
+  const ring = selectionRing === "anchor" || selectionRing === "second" ? selectionRing : null;
 
   // Drillable means: card click OR value click OR expand breakdown
   const hasDrill =
@@ -151,8 +157,17 @@ export default function MetricCard({
     return rows;
   }, [expandRows, isCommitCard]);
 
-  const containerStyle = useMemo(
-    () => ({
+  const containerStyle = useMemo(() => {
+    const baseShadow =
+      hover && hasDrill ? "var(--salt-card-shadow-hover)" : "var(--salt-card-shadow)";
+    const ringShadow =
+      ring === "anchor"
+        ? "0 0 0 3px #59C1A7, 0 0 0 6px rgba(89,193,167,0.22)"
+        : ring === "second"
+          ? "0 0 0 3px #0b3251, 0 0 0 6px rgba(11,50,81,0.18)"
+          : null;
+
+    return {
       position: "relative",
       background: "var(--salt-card-bg)",
       border: "var(--salt-card-border)",
@@ -160,8 +175,7 @@ export default function MetricCard({
       padding: 14,
       paddingBottom: 14,
 
-      boxShadow:
-        hover && hasDrill ? "var(--salt-card-shadow-hover)" : "var(--salt-card-shadow)",
+      boxShadow: ringShadow ? `${ringShadow}, ${baseShadow}` : baseShadow,
       transform: hover && hasDrill ? "translateY(-1px)" : "translateY(0)",
       transition: "all 180ms ease",
       cursor: hasDrill ? "pointer" : "default",
@@ -174,16 +188,16 @@ export default function MetricCard({
       flexDirection: "column",
       justifyContent: "space-between",
       overflow: "visible",
-      zIndex: expanded ? 60 : 1,
-    }),
-    [hover, hasDrill, expanded]
-  );
+      zIndex: expanded ? 60 : ring ? 8 : 1,
+    };
+  }, [hover, hasDrill, expanded, ring]);
 
   const launchStyle = useMemo(
     () => ({
       position: "absolute",
       top: 10,
-      right: 10,
+      /* Sit left of upper-right currency/BETA pill when present. */
+      right: headerRight ? 56 : 10,
       width: 26,
       height: 26,
       borderRadius: 10,
@@ -194,7 +208,7 @@ export default function MetricCard({
       transition: "opacity 160ms ease, transform 160ms ease",
       pointerEvents: "none",
     }),
-    [hover, hasDrill]
+    [hover, hasDrill, headerRight]
   );
 
   const scrimStyle = useMemo(
@@ -331,7 +345,31 @@ export default function MetricCard({
         onClick={handleCardClick}
         onDoubleClick={onDoubleClick}
         onKeyDown={onKeyDown}
+        data-selection-ring={ring || undefined}
       >
+        {ring ? (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 10,
+              bottom: 10,
+              zIndex: 2,
+              padding: "2px 8px",
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 0.2,
+              lineHeight: 1.2,
+              color: ring === "anchor" ? "#0b3251" : "#ffffff",
+              background: ring === "anchor" ? "rgba(89,193,167,0.92)" : "rgba(11,50,81,0.92)",
+              pointerEvents: "none",
+            }}
+          >
+            {ring === "anchor" ? "1" : "2"}
+          </div>
+        ) : null}
+
         <div style={launchStyle}>
           <LaunchIcon />
         </div>
@@ -339,10 +377,15 @@ export default function MetricCard({
         <div
           style={{
             display: "flex",
-            alignItems: headerRight ? "center" : "flex-start",
+            alignItems: "flex-start",
             justifyContent: "space-between",
             gap: 8,
             minWidth: 0,
+            width: "100%",
+            boxSizing: "border-box",
+            position: "relative",
+            /* Reserve rail so eyebrow text does not run under the upper-right pill. */
+            paddingRight: headerRight ? 56 : 0,
           }}
         >
           <div
@@ -353,11 +396,12 @@ export default function MetricCard({
               letterSpacing: "var(--salt-type-eyebrow-tracking)",
               opacity: 0.88,
               textTransform: labelTextTransform,
-              flex: 1,
+              flex: "1 1 0",
               minWidth: 0,
               lineHeight: 1.25,
-              overflowWrap: "break-word",
-              wordBreak: "break-word",
+              /* Wrap at spaces only — avoid mid-word breaks like "BOAR D". */
+              overflowWrap: "normal",
+              wordBreak: "normal",
             }}
           >
             {label}
@@ -366,9 +410,13 @@ export default function MetricCard({
           {headerRight ? (
             <div
               style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
                 flexShrink: 0,
-                /* Leave room for the absolute-position launch hint (26px + inset) on hover */
-                marginRight: hasDrill ? 36 : 0,
+                zIndex: 2,
+                // Allow interactive header chips (e.g. Board ACV↔ARR toggle); static chips still bubble.
+                pointerEvents: "auto",
               }}
             >
               {headerRight}

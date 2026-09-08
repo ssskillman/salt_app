@@ -79,29 +79,33 @@ export default function WaterfallChart({ data, onBarClick }) {
   };
 
   // -----------------------------
-  // Labels
+  // Labels — same type as Start ($19.7M); equal gap above/below bars
   // -----------------------------
+  const LABEL_FONT = {
+    fontSize: 18,
+    fontWeight: 1000,
+    fontFamily: "var(--salt-font-sans, inherit)",
+  };
+  /** Distance from bar edge to nearest edge of the label (pos above / neg below). */
+  const LABEL_GAP = 14;
+
   // Positive labels ABOVE bars
   const renderPosLabel = (props) => {
-    const { x, y, width, value, index } = props;
+    const { x, y, width, height, value } = props;
     const delta = toNumber(value);
 
     if (!Number.isFinite(delta) || delta <= 0) return null;
 
-    const entry = chartData?.[index] || {};
-    const fontSize = entry.isPillar ? 18 : 16;
-
-    // Small nudge upward so it’s clearly above the bar
-    const dy = entry.isPillar ? 10 : 8;
+    const top = Math.min(y ?? 0, (y ?? 0) + (height ?? 0));
 
     return (
       <text
         x={(x ?? 0) + (width ?? 0) / 2}
-        y={(y ?? 0) - dy}
+        y={top - LABEL_GAP}
         fill="rgba(15,23,42,0.92)"
         textAnchor="middle"
-        dominantBaseline="middle"
-        style={{ fontSize, fontWeight: 1000 }}
+        dominantBaseline="auto"
+        style={LABEL_FONT}
         pointerEvents="none"
       >
         {fmtMoneyCompact(delta)}
@@ -111,25 +115,21 @@ export default function WaterfallChart({ data, onBarClick }) {
 
   // Negative labels BELOW bars
   const renderNegLabel = (props) => {
-    const { x, y, width, value, index } = props;
+    const { x, y, width, height, value } = props;
     const delta = toNumber(value);
 
     if (!Number.isFinite(delta) || delta >= 0) return null;
 
-    const entry = chartData?.[index] || {};
-    const fontSize = entry.isPillar ? 18 : 16;
-
-    // Small nudge downward so it’s clearly below the bar
-    const dy = entry.isPillar ? 10 : 8;
+    const bottom = Math.max(y ?? 0, (y ?? 0) + (height ?? 0));
 
     return (
       <text
         x={(x ?? 0) + (width ?? 0) / 2}
-        y={(y ?? 0) + dy}
+        y={bottom + LABEL_GAP}
         fill="rgba(15,23,42,0.92)"
         textAnchor="middle"
-        dominantBaseline="middle"
-        style={{ fontSize, fontWeight: 1000 }}
+        dominantBaseline="hanging"
+        style={LABEL_FONT}
         pointerEvents="none"
       >
         {fmtMoneyCompact(delta)}
@@ -142,7 +142,7 @@ export default function WaterfallChart({ data, onBarClick }) {
       <BarChart
         data={chartData}
         // keeps chart tight while leaving room for above/below labels
-        margin={{ top: 44, right: 30, left: 20, bottom: 52 }}
+        margin={{ top: 48, right: 30, left: 20, bottom: 56 }}
       >
         <CartesianGrid strokeDasharray="10" vertical={false} stroke="rgba(15,23,42,.25)" />
 
@@ -160,14 +160,14 @@ export default function WaterfallChart({ data, onBarClick }) {
           tickLine={false}
           tickMargin={8}
           tick={{ fontSize: 12, fontWeight: 900, fill: "rgba(15,23,42,0.6)" }}
-          // just enough breathing room so negative labels don’t hit the x-axis row
-          padding={{ top: 14, bottom: 26 }}
+          // room so negative value labels don’t collide with category ticks
+          padding={{ top: 16, bottom: 32 }}
         />
 
         <Tooltip content={<CustomTooltip />} cursor={{ fill: "transparent" }} />
 
-        {/* float bar */}
-        <Bar dataKey="placeholder" stackId="a" fill="transparent" />
+        {/* float bar — animation off so stacked LabelLists do not flicker on redraw */}
+        <Bar dataKey="placeholder" stackId="a" fill="transparent" isAnimationActive={false} />
 
         {/* the actual delta bar */}
         <Bar
@@ -176,6 +176,7 @@ export default function WaterfallChart({ data, onBarClick }) {
           radius={[15, 15, 15, 15]}
           onClick={(d) => onBarClick?.(d)}
           style={{ cursor: "pointer" }}
+          isAnimationActive={false}
         >
           {/* ✅ positives above */}
           <LabelList dataKey="delta" position="top" content={renderPosLabel} />

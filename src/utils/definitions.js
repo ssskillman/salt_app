@@ -98,12 +98,16 @@ export const DEFINITIONS = {
         def: "The quarterly bookings plan / budget for all business lines (shown with an ACV chip).\nWhy it matters: Anchors “how much we planned to book” vs forecast and closed performance.",
       },
       {
-        term: "FORECAST",
-        def: "Expected Closed Won ACV for the quarter (company-level). Expand the card to compare Forecast, Quota, Commit, Best Case, and Open Pipeline in one place.\nWhy it matters: This is the operating number execs manage to; clicking the value jumps to CRO territory context when configured.",
+        term: "SALES FORECAST",
+        def: "Expected Closed Won ACV for the quarter (company-level sales forecast). Expand the card to compare Sales Forecast, Quota, Commit, Best Case, and Open Pipeline in one place.\nWhy it matters: This is the operating number execs manage to; clicking the value jumps to CRO territory context when configured.",
+      },
+      {
+        term: "BOARD FORECAST",
+        def: "Board-approved number for the selected fiscal quarter and business line — the compare anchor for Company Totals. Click the ACV/ARR pill to toggle basis (default ACV; ARR uses FY-quarter neon styling).\nQ2 ACV: All $13.6M (New Business $6.057M + Gross Expansion $7.516M). Q2 ARR: All $14.0M (New $6.0M + Expansion $8.0M). Q3: ARR All $6.9M until splits are published.\nBudget and Sales Forecast footers + the compare modal use whatever Board basis is currently shown.\nWhy it matters: Distinguishes the formal board number from the operating Sales Forecast (ACV).",
       },
       {
         term: "Closed (QTD)",
-        def: "Closed Won ACV booked quarter-to-date for the selected business line on the company opportunity spine.\nThe card footer shows the gap vs company Forecast for the quarter: ▲/▼ with the absolute dollar gap and “ahead of Forecast” or “behind Forecast” (closed $ − forecast $).\nWhy it matters: Realized bookings vs plan; click opens the Closed Trend view.",
+        def: "Closed Won ACV booked quarter-to-date for the selected business line on the company opportunity spine.\nThe card footer shows the gap vs company Sales Forecast for the quarter: ▲/▼ with the absolute dollar gap and “ahead of Sales Forecast” or “behind Sales Forecast” (closed $ − sales forecast $).\nWhy it matters: Realized bookings vs plan; click opens the Closed Trend view.",
       },
       {
         term: "PACING TO FORECAST",
@@ -115,7 +119,7 @@ export const DEFINITIONS = {
       },
       {
         term: "STAGE 4+ COVERAGE",
-        def: "Late-stage qualified pipeline (Stage 4 and above) expressed as a multiple of quarterly forecast.\nWhy it matters: Indicates whether enough qualified deals exist to close the gap to plan. Very low multiples (<~1.5×) often precede forecast risk; ~2–3× is a common healthy band (org-dependent).",
+        def: "Coverage multiple of Commit: (Stage 4+ open pipeline ACV + Closed Won QTD) ÷ Commit, always for All business lines.\nWhen a business-line filter is selected, the card keeps the All value (commit is not available by New Business / Gross Expansion).\nWhy it matters: Indicates whether enough late-stage pipeline plus booked ACV exists versus the commit number. Very low multiples (<~1.5×) often precede forecast risk; ~2–3× is a common healthy band (org-dependent).",
       },
       {
         term: "VELOCITY",
@@ -340,14 +344,16 @@ export const DEFINITIONS = {
 
   cro_waterfall: {
     title: "CRO WATERFALL LOGIC",
-    summary: "Explains how the period changes from Start to Total across movement categories.",
+    summary:
+      "Explains how the period changes from Start to Total across movement categories. Amounts default to ACV (same currency family as Field Execution). Map an optional ARR amount column to enable an ACV/ARR toggle. Closed Lost here is signed pipeline movement—not the same recipe as Field Execution Closed Lost ACV.",
     metrics: [
+      { term: "ACV / ARR", def: "Primary amount is ACV via Waterfall · Amount ACV. When ARR is also mapped, use the header toggle to switch currencies." },
       { term: "Start", def: "Starting baseline for the period." },
       { term: "New", def: "Revenue generated from completely new customer logos." },
       { term: "Expansion", def: "Increase in revenue from existing customer accounts through upsells or cross-sells." },
       { term: "Contraction", def: "Loss of revenue from existing customers who reduced spend but did not churn." },
       { term: "Closed Won", def: "Won outcomes contributing to the period movement." },
-      { term: "Closed Lost", def: "Lost outcomes contributing to the period movement." },
+      { term: "Closed Lost", def: "Lost outcomes contributing to the period movement (signed). Not the same total as Field Execution Closed Lost QTD ACV." },
       { term: "Total", def: "Ending total after accounting for all movement categories." },
     ],
   },

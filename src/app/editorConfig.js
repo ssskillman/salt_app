@@ -51,7 +51,8 @@ export const editorConfig = [
   { name: "source_waterfall", type: "element", label: "CRO · Waterfall Data Source" },
 
   { name: "wf_name", label: "CRO · Waterfall · Category Name", type: "column", source: "source_waterfall" },
-  { name: "wf_amount", label: "CRO · Waterfall · Amount", type: "column", source: "source_waterfall" },
+  { name: "wf_amount", label: "CRO · Waterfall · Amount ACV ($) — primary / default", type: "column", source: "source_waterfall" },
+  { name: "wf_amount_arr", label: "CRO · Waterfall · Amount ARR ($) — optional; enables ACV/ARR toggle", type: "column", source: "source_waterfall" },
 
   { name: "wf_opp_name", label: "CRO · Waterfall · Opportunity Name", type: "column", source: "source_waterfall" },
   { name: "wf_opp_owner", label: "CRO · Waterfall · Opportunity Owner", type: "column", source: "source_waterfall" },
@@ -235,6 +236,8 @@ export const editorConfig = [
   { name: "budget_month_name", type: "column", source: "source_budget", label: "CORE · Budget: Month Name" },
   { name: "budget_amount", type: "column", source: "source_budget", label: "CORE · Budget: Budget Amount" },
   { name: "budget_prompted_row", type: "column", source: "source_budget", label: "CORE · Budget: Prompted Row" },
+  { name: "source_board_forecast", type: "element", label: "CORE · Board Forecast Data" },
+  { name: "board_forecast_payload", type: "column", source: "source_board_forecast", label: "CORE · Board Forecast: JSON" },
 
   // ------------------------------------------------------------
   // CORE: EMPLOYEE SCOPE OPPORTUNITY SPINE

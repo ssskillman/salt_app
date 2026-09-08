@@ -650,10 +650,11 @@ export default function RevintelTreeSection({ rows, onSelectNode }) {
     if (expanded.size > 0) return;
     if (didInitDefaultExpand.current) return;
 
-    const dougRoot = baseTree.find((n) => String(n.label || "").trim().toLowerCase() === "doug adamic") || null;
+    const croRoot =
+      baseTree.find((n) => String(n.label || "").trim().toLowerCase() === "teri hatfield") || null;
 
-    if (dougRoot) {
-      setExpanded(new Set([dougRoot.id]));
+    if (croRoot) {
+      setExpanded(new Set([croRoot.id]));
       didInitDefaultExpand.current = true;
     }
   }, [baseTree, expanded.size, selectedOption]);

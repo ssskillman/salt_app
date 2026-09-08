@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "SALT Build and Deploy Workflow",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "dev",
+      "label": "Local Dev"
+    },
+    {
+      "id": "guard",
+      "label": "Budget Guards"
+    },
+    {
+      "id": "blocked",
+      "label": "Blocked",
+      "variant": "exception"
+    },
+    {
+      "id": "ci",
+      "label": "Continuous Build"
+    },
+    {
+      "id": "hosting",
+      "label": "Hosting"
+    },
+    {
+      "id": "sigma",
+      "label": "Sigma Workbook"
+    }
+  ],
+  "phases": [
+    {
+      "id": "author",
+      "label": "Author",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "gate",
+      "label": "Gate on budget",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "ship",
+      "label": "Ship",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "edit",
+    "verify",
+    "url_check",
+    "audit",
+    "push",
+    "netlify",
+    "remap"
+  ],
+  "nodes": [
+    {
+      "id": "edit",
+      "lane": "dev",
+      "col": 0,
+      "type": "frontend",
+      "label": "Edit salt_app",
+      "sublabel": "vite dev on 3052"
+    },
+    {
+      "id": "verify",
+      "lane": "dev",
+      "col": 1,
+      "type": "backend",
+      "label": "Local Verify",
+      "sublabel": "lint, build, test:domain",
+      "width": 108
+    },
+    {
+      "id": "url_check",
+      "lane": "guard",
+      "col": 2,
+      "type": "security",
+      "label": "URL Budget",
+      "sublabel": "check:url:strict",
+      "tag": "hard 5k config",
+      "width": 100
+    },
+    {
+      "id": "audit",
+      "lane": "guard",
+      "col": 3,
+      "type": "security",
+      "label": "Config Audit",
+      "sublabel": "unused panel keys",
+      "width": 100
+    },
+    {
+      "id": "over_budget",
+      "lane": "blocked",
+      "col": 2,
+      "type": "security",
+      "label": "Over Budget",
+      "sublabel": "trim editorConfig",
+      "width": 100
+    },
+    {
+      "id": "push",
+      "lane": "ci",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Push to main",
+      "sublabel": "git push origin",
+      "width": 96
+    },
+    {
+      "id": "cloudbuild",
+      "lane": "ci",
+      "col": 5,
+      "type": "cloud",
+      "label": "Cloud Build",
+      "sublabel": "cloudbuild.yaml",
+      "width": 96
+    },
+    {
+      "id": "netlify",
+      "lane": "hosting",
+      "col": 4,
+      "type": "cloud",
+      "label": "Netlify",
+      "sublabel": "base salt_app",
+      "brand": "netlify",
+      "width": 96
+    },
+    {
+      "id": "firebase",
+      "lane": "hosting",
+      "col": 5,
+      "type": "cloud",
+      "label": "Firebase",
+      "sublabel": "prod + salt-gcp",
+      "brand": "firebase",
+      "width": 96
+    },
+    {
+      "id": "remap",
+      "lane": "sigma",
+      "col": 5,
+      "type": "external",
+      "label": "Plugin Re-map",
+      "sublabel": "drop stale config",
+      "width": 96
+    }
+  ],
+  "edges": [
+    {
+      "id": "edit-verify",
+      "from": "edit",
+      "to": "verify",
+      "variant": "default"
+    },
+    {
+      "id": "config-changed",
+      "from": "verify",
+      "to": "url_check",
+      "label": "config changed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelSegment": 1,
+      "labelDy": 11
+    },
+    {
+      "id": "under-budget",
+      "from": "url_check",
+      "to": "audit",
+      "label": "under budget",
+      "labelDy": -28
+    },
+    {
+      "id": "over-budget",
+      "from": "url_check",
+      "to": "over_budget",
+      "label": "over 5k chars",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelDy": 11
+    },
+    {
+      "id": "trim-rerun",
+      "from": "over_budget",
+      "to": "edit",
+      "label": "re-run guards",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "left",
+      "toSide": "left",
+      "route": "return-left",
+      "labelDx": 44
+    },
+    {
+      "id": "clean-config",
+      "from": "audit",
+      "to": "push",
+      "label": "clean config",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelSegment": 1
+    },
+    {
+      "id": "trigger-ci",
+      "from": "push",
+      "to": "cloudbuild",
+      "label": "trigger",
+      "labelDy": -20
+    },
+    {
+      "id": "netlify-build",
+      "from": "push",
+      "to": "netlify",
+      "label": "npm run build",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "firebase-deploy",
+      "from": "cloudbuild",
+      "to": "firebase",
+      "label": "deploy hosting",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "prod-url",
+      "from": "netlify",
+      "to": "remap",
+      "label": "plugin URL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "channel-url",
+      "from": "firebase",
+      "to": "remap",
+      "label": "channel URL",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Budget Gates",
+      "items": [
+        "Soft config budget is 12,000 chars, hard target is 5,000",
+        "URL proxy of plugin.json plus config must stay under 7,500",
+        "check:url:strict exits non-zero, so CI stops on a fat panel",
+        "Firebase measured a practical ceiling near 8,170 URL chars"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Deploy Targets",
+      "items": [
+        "Netlify builds salt_app and publishes dist as the prod plugin",
+        "cloudbuild.yaml runs npm ci, audit, build, firebase deploy",
+        "cloudbuild-salt-gcp.yaml ships the salt-gcp channel for 30 days",
+        "cloudbuild-staging.yaml publishes the staging preview channel"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "After Deploy",
+      "items": [
+        "Re-map the plugin in Sigma so stale config keys fall away",
+        "Rebind commit card, budget, FA payload, and ESO spine",
+        "Confirm Company Totals still matches the commit card",
+        "salt_app_gcp is the archived twin, not the primary app"
+      ]
+    }
+  ]
+}

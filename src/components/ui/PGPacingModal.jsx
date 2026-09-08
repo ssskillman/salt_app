@@ -197,7 +197,11 @@ export default function PGPacingModal({
       resolveColumnKey(config?.pg_business_line) ||
       resolveColumnKey(config?.pg_bl) ||
       resolveColumnKey(config?.business_line) ||
-      resolveColumnKey(config?.fa_business_line);
+      resolveColumnKey(config?.fa_business_line) ||
+      (r.length > 0 && r[0] ? Object.keys(r[0]).find((k) => {
+        const kl = k.toLowerCase().replace(/[_\s-]+/g, "");
+        return kl === "businessline" || kl === "bl";
+      }) : null);
 
     const monthNameKey =
       resolveColumnKey(config?.pg_month_name) ||
@@ -224,7 +228,11 @@ export default function PGPacingModal({
       resolveColumnKey(config?.pg_month_created) ||
       resolveColumnKey(config?.pg_actual) ||
       resolveColumnKey(config?.pg_pipe_gen) ||
-      resolveColumnKey(config?.pg_month_actual);
+      resolveColumnKey(config?.pg_month_actual) ||
+      (r.length > 0 && r[0] ? Object.keys(r[0]).find((k) => {
+        const kl = k.toLowerCase().replace(/[_\s-]+/g, "");
+        return kl === "pipegen" || kl === "monthcreated" || kl === "pgmonthcreated" || kl === "pipegencreated" || kl === "created";
+      }) : null);
 
     const monthAttKey =
       resolveColumnKey(config?.pg_month_attainment) ||
@@ -250,38 +258,103 @@ export default function PGPacingModal({
 
     if (canBuildFromRows) {
       const fyq = firstNonEmpty(r, fyqKey) ?? null;
-      const businessLine = firstNonEmpty(r, blKey) ?? null;
+      const resolvedBL = firstNonEmpty(r, blKey) ?? null;
 
+      // Separate rows into "total" (pre-aggregated All/Combined) vs "segment" (NB, GE).
+      // Per month: prefer the total row; fill missing created/goal from segments.
+      const isTotalRow = (row) => {
+        if (!blKey) return false;
+        const bl = String(row?.[blKey] ?? "").trim().toLowerCase().replace(/[_-]+/g, " ");
+        return (
+          bl === "all" ||
+          bl === "new business + expansion" ||
+          bl === "new business+expansion" ||
+          bl === "new business & expansion" ||
+          bl === "combined" ||
+          (bl.includes("new business") && bl.includes("expansion"))
+        );
+      };
+
+      const totalRows = blKey ? r.filter(isTotalRow) : [];
+      const segmentRows = blKey ? r.filter((row) => !isTotalRow(row)) : r;
+
+      // For total rows: take first non-zero value per month (don't sum multiple total BLs)
+      const buildTotalMonthMap = (rows) => {
+        const map = new Map();
+        for (const row of rows) {
+          const nameRaw = row?.[monthNameKey];
+          const name = nameRaw == null ? "" : String(nameRaw).trim();
+          if (!name) continue;
+
+          const sortRaw =
+            (monthSortKey && row?.[monthSortKey] != null ? row?.[monthSortKey] : null) ??
+            row?.[monthInQtrKey];
+          const sort = parseSortValue(sortRaw);
+
+          const goal = monthGoalKey ? safeNum(row?.[monthGoalKey]) ?? 0 : 0;
+          const created = monthCreatedKey ? safeNum(row?.[monthCreatedKey]) ?? 0 : 0;
+
+          const existing = map.get(name);
+          if (!existing) {
+            map.set(name, { name, sort: sort ?? null, goal, created });
+          } else {
+            // Don't sum — take first non-zero for each field
+            if (existing.goal === 0 && goal > 0) existing.goal = goal;
+            if (existing.created === 0 && created > 0) existing.created = created;
+            if (existing.sort == null && sort != null) existing.sort = sort;
+          }
+        }
+        return map;
+      };
+
+      // For segment rows: sum NB + GE values per month
+      const buildSegmentMonthMap = (rows) => {
+        const map = new Map();
+        for (const row of rows) {
+          const nameRaw = row?.[monthNameKey];
+          const name = nameRaw == null ? "" : String(nameRaw).trim();
+          if (!name) continue;
+
+          const sortRaw =
+            (monthSortKey && row?.[monthSortKey] != null ? row?.[monthSortKey] : null) ??
+            row?.[monthInQtrKey];
+          const sort = parseSortValue(sortRaw);
+
+          const goal = monthGoalKey ? safeNum(row?.[monthGoalKey]) ?? 0 : 0;
+          const created = monthCreatedKey ? safeNum(row?.[monthCreatedKey]) ?? 0 : 0;
+
+          const existing = map.get(name) || { name, sort: sort ?? null, goal: 0, created: 0 };
+          existing.goal += goal;
+          existing.created += created;
+          if (existing.sort == null && sort != null) existing.sort = sort;
+          if (existing.sort != null && sort != null) existing.sort = Math.min(existing.sort, sort);
+          map.set(name, existing);
+        }
+        return map;
+      };
+
+      const totalByMonth = buildTotalMonthMap(totalRows);
+      const segmentByMonth = buildSegmentMonthMap(segmentRows);
+
+      // Merge: prefer total row per month; fill missing values from segments
       const byMonth = new Map();
+      const allMonthNames = new Set([...totalByMonth.keys(), ...segmentByMonth.keys()]);
+      for (const mName of allMonthNames) {
+        const total = totalByMonth.get(mName);
+        const segment = segmentByMonth.get(mName);
 
-      for (const row of r) {
-        const nameRaw = row?.[monthNameKey];
-        const name = nameRaw == null ? "" : String(nameRaw).trim();
-        if (!name) continue;
-
-        const sortRaw =
-          (monthSortKey && row?.[monthSortKey] != null ? row?.[monthSortKey] : null) ??
-          row?.[monthInQtrKey];
-        const sort = parseSortValue(sortRaw);
-
-        const goal = monthGoalKey ? safeNum(row?.[monthGoalKey]) ?? 0 : 0;
-        const created = monthCreatedKey ? safeNum(row?.[monthCreatedKey]) ?? 0 : 0;
-
-        const existing = byMonth.get(name) || {
-          name,
-          sort: sort ?? null,
-          goal: 0,
-          created: 0,
-          att: null,
-        };
-
-        existing.goal += goal;
-        existing.created += created;
-
-        if (existing.sort == null && sort != null) existing.sort = sort;
-        if (existing.sort != null && sort != null) existing.sort = Math.min(existing.sort, sort);
-
-        byMonth.set(name, existing);
+        if (total && (total.goal > 0 || total.created > 0)) {
+          const merged = { ...total };
+          if (merged.created === 0 && segment && segment.created > 0) {
+            merged.created = segment.created;
+          }
+          if (merged.goal === 0 && segment && segment.goal > 0) {
+            merged.goal = segment.goal;
+          }
+          byMonth.set(mName, merged);
+        } else if (segment) {
+          byMonth.set(mName, segment);
+        }
       }
 
       let months = Array.from(byMonth.values());
@@ -333,7 +406,7 @@ export default function PGPacingModal({
 
       return {
         fyq,
-        businessLine,
+        businessLine: resolvedBL,
         quarterGoal,
         quarterCreated,
         quarterAttainment: safePct(quarterAttainment),

@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "SALT Plugin Data Workflow",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "host",
+      "label": "Sigma Host"
+    },
+    {
+      "id": "hook",
+      "label": "useSigmaData"
+    },
+    {
+      "id": "derive",
+      "label": "Derived State"
+    },
+    {
+      "id": "cards",
+      "label": "SALT UI"
+    },
+    {
+      "id": "fallback",
+      "label": "Fallback Path",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "configure",
+      "label": "Configure",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "fetch",
+      "label": "Fetch + resolve",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "render",
+      "label": "Derive + render",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "workbook",
+    "panel_config",
+    "element_data",
+    "normalize",
+    "transforms",
+    "data_bags",
+    "company_totals"
+  ],
+  "nodes": [
+    {
+      "id": "workbook",
+      "lane": "host",
+      "col": 0,
+      "type": "external",
+      "label": "Sigma Workbook",
+      "sublabel": "elements + columns"
+    },
+    {
+      "id": "panel_config",
+      "lane": "host",
+      "col": 1,
+      "type": "frontend",
+      "label": "Panel Config",
+      "sublabel": "element + column IDs",
+      "tag": "editorConfig.js",
+      "width": 108
+    },
+    {
+      "id": "element_data",
+      "lane": "hook",
+      "col": 2,
+      "type": "backend",
+      "label": "useElementData",
+      "sublabel": "fetch per element",
+      "width": 100
+    },
+    {
+      "id": "normalize",
+      "lane": "hook",
+      "col": 3,
+      "type": "backend",
+      "label": "Normalize Rows",
+      "sublabel": "processRows + aliases",
+      "width": 100
+    },
+    {
+      "id": "spine",
+      "lane": "derive",
+      "col": 2,
+      "type": "database",
+      "label": "ESO Spine",
+      "sublabel": "opportunity grain",
+      "width": 100
+    },
+    {
+      "id": "transforms",
+      "lane": "derive",
+      "col": 4,
+      "type": "backend",
+      "label": "Transforms",
+      "sublabel": "forecast metric rows",
+      "width": 96
+    },
+    {
+      "id": "data_bags",
+      "lane": "derive",
+      "col": 5,
+      "type": "database",
+      "label": "Data Bags",
+      "sublabel": "data.co / data.fa",
+      "width": 96
+    },
+    {
+      "id": "field_exec",
+      "lane": "cards",
+      "col": 2,
+      "type": "frontend",
+      "label": "Field Execution",
+      "sublabel": "Stage 4+ coverage",
+      "width": 112
+    },
+    {
+      "id": "company_totals",
+      "lane": "cards",
+      "col": 5,
+      "type": "frontend",
+      "label": "Company Totals",
+      "sublabel": "forecast + budget",
+      "width": 96
+    },
+    {
+      "id": "detail_fallback",
+      "lane": "fallback",
+      "col": 3,
+      "type": "database",
+      "label": "Detail Data",
+      "sublabel": "data.d backup values",
+      "width": 100
+    }
+  ],
+  "edges": [
+    {
+      "id": "analyst-binds",
+      "from": "workbook",
+      "to": "panel_config",
+      "label": "analyst binds",
+      "variant": "emphasis",
+      "labelDy": 58
+    },
+    {
+      "id": "config-ids",
+      "from": "panel_config",
+      "to": "element_data",
+      "label": "config IDs",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelSegment": 1,
+      "labelDy": 11
+    },
+    {
+      "id": "columns-to-rows",
+      "from": "element_data",
+      "to": "normalize",
+      "label": "columnar rows",
+      "labelDy": -20
+    },
+    {
+      "id": "resolved-keys",
+      "from": "normalize",
+      "to": "transforms",
+      "label": "resolved keys",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop",
+      "labelSegment": 1,
+      "labelDx": 48
+    },
+    {
+      "id": "memoized-values",
+      "from": "transforms",
+      "to": "data_bags",
+      "variant": "emphasis"
+    },
+    {
+      "id": "render-cards",
+      "from": "data_bags",
+      "to": "company_totals",
+      "label": "co.forecast",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "spine-rows",
+      "from": "element_data",
+      "to": "spine",
+      "label": "ESO rows",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "spine-execution",
+      "from": "spine",
+      "to": "field_exec",
+      "label": "Stage 4+ math",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "detail-columns",
+      "from": "normalize",
+      "to": "detail_fallback",
+      "label": "detail columns",
+      "variant": "dashed",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "drop"
+    },
+    {
+      "id": "detail-backup",
+      "from": "detail_fallback",
+      "to": "field_exec",
+      "label": "spine keys missing",
+      "variant": "dashed",
+      "role": "error",
+      "labelDx": -62
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Panel Source to Card",
+      "items": [
+        "source_commit_card drives the Sales Forecast family",
+        "source_budget sums Total Company Target rows",
+        "source_drill_forecast_attainment_payload feeds Pacing",
+        "source_detail only supplies the greeting and data.d"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Resolution Rules",
+      "items": [
+        "Element IDs come from the Sigma URL, never hardcoded",
+        "COLUMN_ALIASES map cc_, fa_, and eso_ prefixes to fields",
+        "ESO columns resolve by alias, not per-field panel entries",
+        "companyTotalsStub.js stands in when no Sigma host exists"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Why It Matters",
+      "items": [
+        "Every card traces back to one panel binding",
+        "Missing bindings degrade instead of crashing",
+        "Panel entries cost URL budget, so unused ones get cut",
+        "Stage 4+ math moved from company data to the ESO spine"
+      ]
+    }
+  ]
+}
