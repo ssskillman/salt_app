@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { DEFINITIONS, VIEW_SUMMARIES } from "../../utils/definitions.js";
 import HelpEmbeddedMarkdown from "./HelpEmbeddedMarkdown.jsx";
 import readmeOnboarding from "../../../README.md?raw";
-import readmeAllJsx from "../../../readme_all_jsx_overview.md?raw";
+import readmeAllJsx from "../../../README_ALL_JSX_OVERVIEW.md?raw";
 
 /** Same section order as `DefinitionsDrawer` → `PERSONA_MAP.view_ceo`. */
 const CEO_VIEW_SECTION_KEYS = [

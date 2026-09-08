@@ -24,6 +24,15 @@ import AeStage4CovThresholdSlider from "./components/ui/AeStage4CovThresholdSlid
 import Surface from "./components/ui/Surface";
 import SurfaceHeader from "./components/ui/SurfaceHeader";
 import MetricCard from "./components/ui/MetricCard";
+import BoardForecastCompareModal from "./components/ui/BoardForecastCompareModal";
+import {
+  BOARD_COMPARE,
+  BOARD_FORECAST_BASIS,
+  reduceBoardComparePick,
+  resolveBoardForecastAmount,
+  fmtBoardForecastArr,
+  toggleBoardForecastBasis,
+} from "./ceo/boardForecastCompare";
 import HorsemanSection from "./components/Horseman/HorsemanSection";
 import DefinitionsDrawer from "./components/DefinitionsDrawer";
 import IconButton from "./components/ui/IconButton";
@@ -174,9 +183,44 @@ function renderCompanyTotalsAllBusinessLinesFooter() {
   );
 }
 
+/** Same plain footer band as All Business Lines — used when Board ARR is unset for FYQ. */
+function renderCompanyTotalsPendingBoardApprovalFooter() {
+  return (
+    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+      <span
+        style={{
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-body-size)",
+          fontWeight: "var(--salt-type-body-weight)",
+          letterSpacing: 0.02,
+          opacity: 0.78,
+        }}
+      >
+        Pending board approval
+      </span>
+    </div>
+  );
+}
+
 /** Same divider band as other Company Totals cards; body reserved for future copy. */
 function renderCompanyTotalsBlankFooterBand() {
   return <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE} aria-hidden="true" />;
+}
+
+/** AE card note: BL-scoped commit is not available for Stage 4+ coverage. */
+const STAGE4_COMMIT_DATA_WIP_NOTE =
+  "We need commit data for New Business and Gross Expansion to complete this calculation.";
+
+const STAGE4_COVERAGE_TITLE_ALL =
+  "(Stage 4+ open pipeline + Closed Won) ÷ Commit — all business lines";
+
+/** Footer copy when New Biz / Expansion is selected (All-only calc). */
+function stage4CoverageBlFooterNote(businessLine) {
+  const bl = String(businessLine ?? "").trim();
+  if (bl === "New Business" || bl === "Gross Expansion") {
+    return `All Business Lines. Commit is not available by ${bl}.`;
+  }
+  return "All Business Lines. Commit is not available by New Business / Gross Expansion.";
 }
 
 /** Below the Company Totals card rule — matches Velocity drill ineligible callout tone. */
@@ -207,6 +251,31 @@ function renderVelocityIneligibleFooterBand(reasonFromSigma) {
   );
 }
 
+/** Stage 4+ Coverage footer — All Business Lines, or BL limitation note in the same plain style. */
+function renderStage4CoverageFooter(businessLine) {
+  const bl = String(businessLine ?? "").trim();
+  if (!bl || bl === "All") {
+    return renderCompanyTotalsAllBusinessLinesFooter();
+  }
+
+  return (
+    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+      <span
+        style={{
+          fontFamily: "var(--salt-font-sans)",
+          fontSize: "var(--salt-type-body-size)",
+          fontWeight: "var(--salt-type-body-weight)",
+          letterSpacing: 0.02,
+          opacity: 0.78,
+          lineHeight: 1.35,
+        }}
+      >
+        {stage4CoverageBlFooterNote(bl)}
+      </span>
+    </div>
+  );
+}
+
 /** CLOSED (QTD): gap vs Forecast only (closed $ − forecast $), same copy as the legacy subValue/subLabel row. */
 function renderCompanyTotalsClosedQtdFooter(vsForecastDelta) {
   return (
@@ -229,7 +298,49 @@ function renderCompanyTotalsClosedQtdFooter(vsForecastDelta) {
             {vsForecastDelta < 0 ? "▼" : "▲"} {fmtMoneyCompact(Math.abs(vsForecastDelta))}
           </span>
           <span style={{ opacity: 0.6 }}>
-            {vsForecastDelta < 0 ? "behind Forecast" : "ahead of Forecast"}
+            {vsForecastDelta < 0 ? "behind Sales Forecast" : "ahead of Sales Forecast"}
+          </span>
+        </div>
+      ) : (
+        <span
+          style={{
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-body-size)",
+            fontWeight: "var(--salt-type-body-weight)",
+            letterSpacing: 0.02,
+            opacity: 0.78,
+          }}
+        >
+          —
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Budget / Sales Forecast: subject $ − Board Forecast $ (Board is always the compare anchor). */
+function renderCompanyTotalsVsBoardForecastFooter(vsBoardDelta) {
+  return (
+    <div style={COMPANY_TOTALS_COMPACT_FOOTER_INNER_STYLE}>
+      {vsBoardDelta != null ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+            fontFamily: "var(--salt-font-sans)",
+            fontSize: "var(--salt-type-body-size)",
+            fontWeight: "var(--salt-type-body-weight)",
+            letterSpacing: 0.02,
+            opacity: 0.78,
+          }}
+        >
+          <span>
+            {vsBoardDelta < 0 ? "▼" : "▲"} {fmtMoneyCompact(Math.abs(vsBoardDelta))}
+          </span>
+          <span style={{ opacity: 0.6 }}>
+            {vsBoardDelta < 0 ? "behind Board Forecast" : "ahead of Board Forecast"}
           </span>
         </div>
       ) : (
@@ -554,6 +665,7 @@ function ScopeHeaderPill({ label }) {
   );
 }
 
+/** Currency chip — same footprint as Horseman `PillMultiSelect` (padding 6×12, 12px). */
 function MiniAcvPill() {
   return (
     <div
@@ -561,13 +673,13 @@ function MiniAcvPill() {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "2px 6px",
+        padding: "6px 12px",
         borderRadius: 999,
         background: "rgba(89,193,167,0.14)",
         border: "1px solid rgba(89,193,167,0.30)",
         color: "rgba(15,23,42,0.88)",
-        fontSize: 11,
-        fontWeight: 950,
+        fontSize: 12,
+        fontWeight: 800,
         letterSpacing: 0.3,
         textTransform: "uppercase",
         lineHeight: 1.1,
@@ -579,6 +691,61 @@ function MiniAcvPill() {
   );
 }
 
+/** Same footprint as MiniAcvPill — Board Forecast ACV↔ARR click toggle.
+ * ACV (default): Budget-matching teal tint. ARR: FY-quarter neon lime + navy ink.
+ */
+function BoardForecastBasisPill({ basis = BOARD_FORECAST_BASIS.acv, onToggle }) {
+  const mode =
+    String(basis).toUpperCase() === BOARD_FORECAST_BASIS.arr
+      ? BOARD_FORECAST_BASIS.arr
+      : BOARD_FORECAST_BASIS.acv;
+  const isArr = mode === BOARD_FORECAST_BASIS.arr;
+  const next = isArr ? BOARD_FORECAST_BASIS.acv : BOARD_FORECAST_BASIS.arr;
+
+  const stop = (e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        stop(e);
+        onToggle?.();
+      }}
+      onMouseDown={stop}
+      title={`Showing ${mode}. Click to switch to ${next}.`}
+      aria-label={`Board Forecast basis ${mode}. Click to toggle to ${next}.`}
+      style={{
+        appearance: "none",
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        margin: 0,
+        padding: "6px 12px",
+        borderRadius: 999,
+        background: isArr ? "#D5FF9F" : "rgba(89,193,167,0.14)",
+        border: isArr
+          ? "1px solid rgba(22, 15, 41, 0.14)"
+          : "1px solid rgba(89,193,167,0.30)",
+        color: isArr ? "#160F29" : "rgba(15,23,42,0.88)",
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: 0.3,
+        textTransform: "uppercase",
+        lineHeight: 1.1,
+        whiteSpace: "nowrap",
+        fontFamily: "inherit",
+        transition: "background 160ms ease, color 160ms ease, border-color 160ms ease",
+      }}
+    >
+      {mode}
+    </button>
+  );
+}
+
 /** Yellow beta chip — same footprint as `MiniAcvPill` (Iterable guideline accent). */
 function MiniBetaPill() {
   return (
@@ -587,13 +754,13 @@ function MiniBetaPill() {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "2px 6px",
+        padding: "6px 12px",
         borderRadius: 999,
         background: "rgba(253, 230, 138, 0.96)",
         border: "1px solid rgba(202, 138, 4, 0.42)",
         color: "rgba(22, 15, 41, 0.92)",
-        fontSize: 11,
-        fontWeight: 950,
+        fontSize: 12,
+        fontWeight: 800,
         letterSpacing: 0.35,
         textTransform: "uppercase",
         lineHeight: 1.1,
@@ -757,6 +924,8 @@ function matchesPgBusinessLine(selected, rowValue) {
   if (!rowNorm) return false;
 
   if (selectedNorm === "all") {
+    // Prefer pre-aggregated total rows but also include NB/GE as fallback
+    // (aggregation logic deduplicates downstream).
     if (
       rowNorm === "all" ||
       rowNorm === "new business + expansion" ||
@@ -766,7 +935,6 @@ function matchesPgBusinessLine(selected, rowValue) {
     ) {
       return true;
     }
-    // Typical Sigma rows are tagged per segment; union NB + GE for CEO "All".
     if (rowNorm.includes("new business") && rowNorm.includes("expansion")) {
       return true;
     }
@@ -1351,10 +1519,6 @@ function BusinessLineToggle({ value, onChange }) {
   );
 }
 
-/** Tooltip copy for Stage 4+ coverage WIP (company card + AE threshold card). */
-const STAGE4_COMMIT_DATA_WIP_NOTE =
-  "We need commit data for New Business and Gross Expansion to complete this calculation.";
-
 export default function App() {
   const goToPrevFieldExecutionInsight = () => {
     if (!fieldExecutionInsightItems.length) return;
@@ -1433,6 +1597,8 @@ export default function App() {
 
   const [closedTrendMode, setClosedTrendMode] = useState("CQ");
   const [closedTrendOpen, setClosedTrendOpen] = useState(false);
+  /** Waterfall currency: ACV is default; ARR requires wf_amount_arr mapped. */
+  const [waterfallCurrency, setWaterfallCurrency] = useState("ACV");
   const closedTrendRef = useRef(null);
   const sideNavRef = useRef(null);
   const scrollAreaRef = useRef(null);
@@ -1463,6 +1629,11 @@ export default function App() {
   const [openPipelineSelectedRisk, setOpenPipelineSelectedRisk] = useState("all");
   const [closedPipelineDrillOpen, setClosedPipelineDrillOpen] = useState(false);
   const [closedLostPipelineDrillOpen, setClosedLostPipelineDrillOpen] = useState(false);
+  /** Company Totals: Board Forecast click-to-compare (pick 1 = board). */
+  const [boardComparePick1, setBoardComparePick1] = useState(null);
+  const [boardCompareTarget, setBoardCompareTarget] = useState(null);
+  /** Board Forecast tile currency basis — default ACV; pill click toggles ACV↔ARR. */
+  const [boardForecastBasis, setBoardForecastBasis] = useState(BOARD_FORECAST_BASIS.acv);
   const [fieldExecutionInsightIndex, setFieldExecutionInsightIndex] = useState(0);
   const [fieldExecutionInsightPaused, setFieldExecutionInsightPaused] = useState(false);
 
@@ -1482,6 +1653,40 @@ export default function App() {
       return next;
     });
   }, []);
+
+  const handleBoardCompareCardClick = useCallback((clickedKey) => {
+    setBoardComparePick1((prev) => {
+      const { pick1, openModal } = reduceBoardComparePick(prev, clickedKey);
+      if (openModal?.target) {
+        queueMicrotask(() => {
+          rememberFeedbackAnchor({
+            section: "COMPANY TOTALS",
+            metricCard: `Compare Board vs ${
+              openModal.target === "budget" ? "Budget" : "Sales Forecast"
+            }`,
+          });
+          setBoardCompareTarget(openModal.target);
+        });
+        // Keep Board selected so both rings show behind the modal.
+        return BOARD_COMPARE.board;
+      }
+      return pick1;
+    });
+  }, [rememberFeedbackAnchor]);
+
+  const closeBoardCompareModal = useCallback(() => {
+    setBoardCompareTarget(null);
+    setBoardComparePick1(null);
+  }, []);
+
+  useEffect(() => {
+    if (!boardComparePick1) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setBoardComparePick1(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [boardComparePick1]);
 
   /** Only block duplicate feedback sessions; drills may stay open underneath (higher z-index on feedback UI). */
   const headerFeedbackBlocked = feedbackModalOpen;
@@ -1893,6 +2098,21 @@ export default function App() {
     return { data: chartRows, stacked: false };
   }, [data?.closedTrend, closedTrendMode, businessLine]);
 
+  const waterfallAmountKey = useMemo(() => {
+    const acvKey = resolveColumnKey(config?.wf_amount);
+    const arrKey = resolveColumnKey(config?.wf_amount_arr);
+    if (waterfallCurrency === "ARR" && arrKey) return arrKey;
+    return acvKey;
+  }, [config?.wf_amount, config?.wf_amount_arr, waterfallCurrency]);
+
+  const waterfallHasArrAmount = !!resolveColumnKey(config?.wf_amount_arr);
+
+  useEffect(() => {
+    if (waterfallCurrency === "ARR" && !waterfallHasArrAmount) {
+      setWaterfallCurrency("ACV");
+    }
+  }, [waterfallCurrency, waterfallHasArrAmount]);
+
   const processedWaterfallData = useMemo(() => {
     const wfRows = rows?.waterfall || [];
     if (wfRows.length === 0) return [];
@@ -1908,7 +2128,7 @@ export default function App() {
     };
 
     const nameKey = resolveColumnKey(config?.wf_name);
-    const amountKey = resolveColumnKey(config?.wf_amount);
+    const amountKey = waterfallAmountKey;
 
     wfRows.forEach((row) => {
       const cat = row?.[nameKey];
@@ -1927,7 +2147,7 @@ export default function App() {
       amount: buckets[name].amt,
       detailRows: buckets[name].rows,
     }));
-  }, [rows?.waterfall, config?.wf_name, config?.wf_amount]);
+  }, [rows?.waterfall, config?.wf_name, waterfallAmountKey]);
 
   const drillData = useMemo(() => {
     const category = processedWaterfallData.find((b) => b.name === drillCategory);
@@ -2083,7 +2303,7 @@ export default function App() {
     }
 
   const fyqKey = resolveColumnKey(config?.fa_fiscal_yearquarter);
-  const blKey = resolveColumnKey(config?.fa_business_line);
+  const blKey = pgBusinessLineKey;
 
   // These may not exist in the forecast-attainment dataset, so let them fall back safely
   const monthSortKey =
@@ -2100,11 +2320,11 @@ export default function App() {
 
   const monthGoalsKey =
     resolveColumnKey(config?.pg_month_goals) ||
-    findRowKeyByCandidates(r, ["month_goals", "Month Goals"]);
+    findRowKeyByCandidates(r, ["month_goals", "Month Goals", "pipe_goal", "PIPE_GOAL", "Pipe_Goal"]);
 
   const monthCreatedKey =
     resolveColumnKey(config?.pg_month_created) ||
-    findRowKeyByCandidates(r, ["month_created", "Month Created"]);
+    findRowKeyByCandidates(r, ["month_created", "Month Created", "pg_month_created", "PG Month Created", "pipe_gen", "Pipe Gen", "PIPE_GEN", "Pipe_Gen", "created"]);
 
   const goalsQtrKey = resolveColumnKey(config?.fa_qtd_forecast);
   const createdQtrKey = resolveColumnKey(config?.fa_qtd_closed);
@@ -2113,26 +2333,99 @@ export default function App() {
     const fyq = firstNonEmpty(r, fyqKey);
     const businessLine = firstNonEmpty(r, blKey);
 
+    // Separate rows into "total" (pre-aggregated All/NB+Expansion) and "segment" (NB, GE).
+    // Per month: use total row if it has data; otherwise sum the segment rows.
+    const isTotalRow = (row) => {
+      if (!blKey) return false;
+      const bl = normalizeBusinessLineForMatch(row?.[blKey]);
+      return (
+        bl === "all" ||
+        bl === "new business + expansion" ||
+        bl === "new business+expansion" ||
+        bl === "new business & expansion" ||
+        bl === "combined" ||
+        (bl.includes("new business") && bl.includes("expansion"))
+      );
+    };
+
+    const totalRows = blKey ? r.filter(isTotalRow) : [];
+    const segmentRows = blKey ? r.filter((row) => !isTotalRow(row)) : r;
+
+    // For total rows: take first non-zero value per month (don't sum multiple total BLs)
+    const buildTotalMonthMap = (rows) => {
+      const map = new Map();
+      for (const row of rows) {
+        const mNameRaw = monthNameKey ? row?.[monthNameKey] : null;
+        const mName = mNameRaw != null && String(mNameRaw).trim() !== "" ? String(mNameRaw).trim() : null;
+        if (!mName) continue;
+
+        const sortA = monthSortKey ? parseSortValue(row?.[monthSortKey]) : null;
+        const sortB = monthInQtrKey ? toNumber(row?.[monthInQtrKey]) : null;
+        const sort = sortB != null ? sortB : sortA;
+
+        const goal = monthGoalsKey ? (toNumber(row?.[monthGoalsKey]) || 0) : 0;
+        const created = monthCreatedKey ? (toNumber(row?.[monthCreatedKey]) || 0) : 0;
+
+        const existing = map.get(mName);
+        if (!existing) {
+          map.set(mName, { name: mName, sort: sort ?? 0, goal, created });
+        } else {
+          // Don't sum — take first non-zero for each field
+          if (existing.goal === 0 && goal > 0) existing.goal = goal;
+          if (existing.created === 0 && created > 0) existing.created = created;
+          if ((existing.sort == null || existing.sort === 0) && sort != null) existing.sort = sort;
+        }
+      }
+      return map;
+    };
+
+    // For segment rows: sum NB + GE values per month
+    const buildSegmentMonthMap = (rows) => {
+      const map = new Map();
+      for (const row of rows) {
+        const mNameRaw = monthNameKey ? row?.[monthNameKey] : null;
+        const mName = mNameRaw != null && String(mNameRaw).trim() !== "" ? String(mNameRaw).trim() : null;
+        if (!mName) continue;
+
+        const sortA = monthSortKey ? parseSortValue(row?.[monthSortKey]) : null;
+        const sortB = monthInQtrKey ? toNumber(row?.[monthInQtrKey]) : null;
+        const sort = sortB != null ? sortB : sortA;
+
+        const goal = monthGoalsKey ? (toNumber(row?.[monthGoalsKey]) || 0) : 0;
+        const created = monthCreatedKey ? (toNumber(row?.[monthCreatedKey]) || 0) : 0;
+
+        const cur = map.get(mName) || { name: mName, sort: sort ?? 0, goal: 0, created: 0 };
+        cur.goal += goal;
+        cur.created += created;
+        if (cur.sort == null || cur.sort === 0) cur.sort = sort ?? cur.sort ?? 0;
+        map.set(mName, cur);
+      }
+      return map;
+    };
+
+    const totalByMonth = buildTotalMonthMap(totalRows);
+    const segmentByMonth = buildSegmentMonthMap(segmentRows);
+
+    // Merge: for each month, prefer the total row; fall back to summed segments
     const byMonth = new Map();
-    for (const row of r) {
-      const mNameRaw = monthNameKey ? row?.[monthNameKey] : null;
-      const mName = mNameRaw != null && String(mNameRaw).trim() !== "" ? String(mNameRaw).trim() : null;
-      if (!mName) continue;
+    const allMonthNames = new Set([...totalByMonth.keys(), ...segmentByMonth.keys()]);
+    for (const mName of allMonthNames) {
+      const total = totalByMonth.get(mName);
+      const segment = segmentByMonth.get(mName);
 
-      const sortA = monthSortKey ? parseSortValue(row?.[monthSortKey]) : null;
-      const sortB = monthInQtrKey ? toNumber(row?.[monthInQtrKey]) : null;
-      const sort = sortB != null ? sortB : sortA;
-
-      const goal = monthGoalsKey ? (toNumber(row?.[monthGoalsKey]) || 0) : 0;
-      const created = monthCreatedKey ? (toNumber(row?.[monthCreatedKey]) || 0) : 0;
-
-      const cur = byMonth.get(mName) || { name: mName, sort: sort ?? 0, goal: 0, created: 0 };
-      cur.goal += goal;
-      cur.created += created;
-
-      if (cur.sort == null || cur.sort === 0) cur.sort = sort ?? cur.sort ?? 0;
-
-      byMonth.set(mName, cur);
+      if (total && (total.goal > 0 || total.created > 0)) {
+        // Use total row but fill in created from segments if total is missing it
+        const merged = { ...total };
+        if (merged.created === 0 && segment && segment.created > 0) {
+          merged.created = segment.created;
+        }
+        if (merged.goal === 0 && segment && segment.goal > 0) {
+          merged.goal = segment.goal;
+        }
+        byMonth.set(mName, merged);
+      } else if (segment) {
+        byMonth.set(mName, segment);
+      }
     }
 
     const months = Array.from(byMonth.values())
@@ -2179,6 +2472,7 @@ export default function App() {
     };
   }, [
     filteredPgRows,
+    pgBusinessLineKey,
     config?.fa_fiscal_yearquarter,
     config?.fa_business_line,
     config?.pg_month_sort,
@@ -2254,9 +2548,10 @@ useEffect(() => {
   const ceoDefaultRollupNode = useMemo(() => {
     if (!Array.isArray(revintelTree) || revintelTree.length === 0) return null;
 
+    // Default Hierarchy Roll-ups / Field Scope to the CRO (Teri Hatfield).
     return (
-      revintelTree.find((n) => String(n?.label || "").trim().toLowerCase() === "doug adamic") ||
-      revintelTree.find((n) => String(n?.displayLabel || "").trim().toLowerCase().includes("doug adamic")) ||
+      revintelTree.find((n) => String(n?.label || "").trim().toLowerCase() === "teri hatfield") ||
+      revintelTree.find((n) => String(n?.displayLabel || "").trim().toLowerCase().includes("teri hatfield")) ||
       null
     );
   }, [revintelTree]);
@@ -2832,19 +3127,24 @@ const companyTotalsDerivedMetrics = useDerivedMetrics({
     0
   );
 
+  // Always All business lines — BL-scoped commit is not available for this KPI.
+  // Sheet: (Stage 4+ open ARR + Closed Won) / Commit (x).
   const companyStage4Value = useMemo(() => {
+    const spine = rows?.employeeScopeOpportunitySpine || [];
     const stageKey =
       resolveColumnKey(config?.eso_stage) ||
-      findRowKeyByCandidates(rows?.employeeScopeOpportunitySpine || [], [
+      findRowKeyByCandidates(spine, [
         "stage_name",
         "Stage Name",
       ]);
 
     const openPipeKey = companyTotalsSpineKeys.openPipe;
+    const closedKey = companyTotalsSpineKeys.closed;
+    const commit = toNumber(commitValue);
 
-    if (!stageKey || !openPipeKey) return null;
+    if (!stageKey || !openPipeKey || commit == null || commit === 0) return null;
 
-    const stage4Open = companyTotalsSpineRows.reduce((sum, r) => {
+    const stage4Open = spine.reduce((sum, r) => {
       const stage = String(r?.[stageKey] ?? "").trim().toLowerCase();
       const isStage4Plus =
         stage === "stage 4" ||
@@ -2858,8 +3158,19 @@ const companyTotalsDerivedMetrics = useDerivedMetrics({
       return sum + (toNumber(r?.[openPipeKey]) || 0);
     }, 0);
 
-    return safeDivide(stage4Open, forecastValue, null);
-  }, [companyTotalsSpineRows, companyTotalsSpineKeys.openPipe, forecastValue, config?.eso_stage, rows?.employeeScopeOpportunitySpine]);
+    const closedWon = closedKey
+      ? spine.reduce((sum, r) => sum + (toNumber(r?.[closedKey]) || 0), 0)
+      : toNumber(companyClosedQTDValue) || 0;
+
+    return safeDivide(stage4Open + closedWon, commit, null);
+  }, [
+    companyTotalsSpineKeys.openPipe,
+    companyTotalsSpineKeys.closed,
+    commitValue,
+    companyClosedQTDValue,
+    config?.eso_stage,
+    rows?.employeeScopeOpportunitySpine,
+  ]);
 
   const velocityPctDaysElapsed = useMemo(() => {
     const dv = data?.dv || {};
@@ -5035,6 +5346,22 @@ const productMixDrillRows = useMemo(() => {
     return fyq != null && String(fyq).trim() !== "" ? String(fyq).trim() : "—";
   }, [pgSummary?.fyq, fa?.fyq, rows?.employeeScopeOpportunitySpine, scopedLargeDealsSpineKeys?.fyq]);
 
+  /** Board Forecast ($): secured dataset values by FYQ / BL. All = New Business + Gross Expansion. */
+  const boardForecastValue = useMemo(
+    () =>
+      resolveBoardForecastAmount(
+        rows?.boardForecast,
+        feedbackFyqDisplay,
+        businessLine,
+        boardForecastBasis
+      ),
+    [rows?.boardForecast, feedbackFyqDisplay, businessLine, boardForecastBasis]
+  );
+
+  /** Budget / Sales vs Board (subject − board); Board is always the compare anchor. */
+  const budgetVsBoardForecastDelta = safeSubtract(budgetValue, boardForecastValue, null);
+  const salesForecastVsBoardForecastDelta = safeSubtract(forecastValue, boardForecastValue, null);
+
   const feedbackContext = useMemo(
     () => ({
       dashboard: "Forecast Dashboard",
@@ -5224,6 +5551,22 @@ const productMixDrillRows = useMemo(() => {
               title="ACCUMULATED WATERFALL"
               subtitle="Pipeline dynamics and revenue flow"
               onInfo={() => openDefs("cro_waterfall")}
+              rightNode={
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {waterfallHasArrAmount ? (
+                    <SegToggle
+                      value={waterfallCurrency}
+                      onChange={setWaterfallCurrency}
+                      options={[
+                        { label: "ACV", value: "ACV" },
+                        { label: "ARR", value: "ARR" },
+                      ]}
+                    />
+                  ) : (
+                    <MiniAcvPill />
+                  )}
+                </div>
+              }
             />
             <div style={{ height: 450, marginTop: 20 }}>
               <WaterfallChart
@@ -5288,51 +5631,104 @@ const productMixDrillRows = useMemo(() => {
                   value={fmtMoneyCompact(budgetValue)}
                   headerRight={<MiniAcvPill />}
                   footerCompact
-                  footer={renderCompanyTotalsAllBusinessLinesFooter()}
+                  footer={renderCompanyTotalsVsBoardForecastFooter(budgetVsBoardForecastDelta)}
+                  onClick={() => handleBoardCompareCardClick(BOARD_COMPARE.budget)}
+                  selectionRing={
+                    boardCompareTarget === BOARD_COMPARE.budget ? "second" : null
+                  }
+                  title={
+                    boardComparePick1 === BOARD_COMPARE.board
+                      ? "Click to compare with Board Forecast"
+                      : "Select Board Forecast first to compare"
+                  }
                 />
+
                 <MetricCard
-                  label="FORECAST"
-                  value={fmtMoneyCompact(forecastValue)}
-                  onValueClick={() => {
-                    setActivePersona("CRO");
-                    setPendingScrollId("revintel-territory-tree");
-                  }}
-                  onClick={undefined}
-                  title="Click the number to jump to CRO • Expand for breakdown"
+                  label="BOARD FORECAST"
+                  value={fmtBoardForecastArr(boardForecastValue)}
+                  headerRight={
+                    <BoardForecastBasisPill
+                      basis={boardForecastBasis}
+                      onToggle={() => setBoardForecastBasis((b) => toggleBoardForecastBasis(b))}
+                    />
+                  }
                   footerCompact
-                  footer={renderCompanyTotalsAllBusinessLinesFooter()}
-                  expandRows={[
-                  {
-                    key: "forecast",
-                    label: "FORECAST",
-                    value: fmtMoneyCompact(forecastValue),
-                    delta: (toNumber(forecastValue) ?? null) - (toNumber(commitValue) ?? 0),
-                  },
-                  {
-                    key: "quota",
-                    label: "QUOTA",
-                    value: fmtMoneyCompact(quotaValue),
-                    delta: (toNumber(quotaValue) ?? null) - (toNumber(commitValue) ?? 0),
-                  },
-                  {
-                    key: "commit",
-                    label: "COMMIT",
-                    value: fmtMoneyCompact(commitValue),
-                    delta: 0,
-                  },
-                  {
-                    key: "best",
-                    label: "BEST_CASE",
-                    value: fmtMoneyCompact(bestCaseValue),
-                    delta: (toNumber(bestCaseValue) ?? null) - (toNumber(commitValue) ?? 0),
-                  },
-                  {
-                    key: "open",
-                    label: "OPEN_PIPELINE",
-                    value: fmtMoneyCompact(openPipelineValue),
-                    delta: (toNumber(openPipelineValue) ?? null) - (toNumber(commitValue) ?? 0),
-                  },
-                ]}
+                  footer={
+                    boardForecastValue == null
+                      ? renderCompanyTotalsPendingBoardApprovalFooter()
+                      : renderCompanyTotalsBlankFooterBand()
+                  }
+                  onClick={() => handleBoardCompareCardClick(BOARD_COMPARE.board)}
+                  selectionRing={boardComparePick1 === BOARD_COMPARE.board ? "anchor" : null}
+                  title={
+                    boardComparePick1 === BOARD_COMPARE.board
+                      ? "Selected — click Budget or Sales Forecast to compare (Esc to clear)"
+                      : `Board Forecast (${boardForecastBasis}). Click pill to toggle ACV/ARR. Click card to start compare.`
+                  }
+                />
+
+                <MetricCard
+                  label="SALES FORECAST"
+                  value={fmtMoneyCompact(forecastValue)}
+                  onValueClick={
+                    boardComparePick1 === BOARD_COMPARE.board
+                      ? undefined
+                      : () => {
+                          setActivePersona("CRO");
+                          setPendingScrollId("revintel-territory-tree");
+                        }
+                  }
+                  onClick={
+                    boardComparePick1 === BOARD_COMPARE.board
+                      ? () => handleBoardCompareCardClick(BOARD_COMPARE.sales)
+                      : undefined
+                  }
+                  selectionRing={
+                    boardCompareTarget === BOARD_COMPARE.sales ? "second" : null
+                  }
+                  title={
+                    boardComparePick1 === BOARD_COMPARE.board
+                      ? "Click to compare with Board Forecast"
+                      : "Click the number to jump to CRO • Expand for breakdown"
+                  }
+                  footerCompact
+                  footer={renderCompanyTotalsVsBoardForecastFooter(salesForecastVsBoardForecastDelta)}
+                  expandRows={
+                    boardComparePick1 === BOARD_COMPARE.board
+                      ? undefined
+                      : [
+                          {
+                            key: "forecast",
+                            label: "SALES FORECAST",
+                            value: fmtMoneyCompact(forecastValue),
+                            delta: (toNumber(forecastValue) ?? null) - (toNumber(commitValue) ?? 0),
+                          },
+                          {
+                            key: "quota",
+                            label: "QUOTA",
+                            value: fmtMoneyCompact(quotaValue),
+                            delta: (toNumber(quotaValue) ?? null) - (toNumber(commitValue) ?? 0),
+                          },
+                          {
+                            key: "commit",
+                            label: "COMMIT",
+                            value: fmtMoneyCompact(commitValue),
+                            delta: 0,
+                          },
+                          {
+                            key: "best",
+                            label: "BEST_CASE",
+                            value: fmtMoneyCompact(bestCaseValue),
+                            delta: (toNumber(bestCaseValue) ?? null) - (toNumber(commitValue) ?? 0),
+                          },
+                          {
+                            key: "open",
+                            label: "OPEN_PIPELINE",
+                            value: fmtMoneyCompact(openPipelineValue),
+                            delta: (toNumber(openPipelineValue) ?? null) - (toNumber(commitValue) ?? 0),
+                          },
+                        ]
+                  }
                 />
 
                 <MetricCard
@@ -5373,9 +5769,8 @@ const productMixDrillRows = useMemo(() => {
                   label="STAGE 4+ COVERAGE"
                   value={fmtX(companyStage4Value)}
                   footerCompact
-                  footer={renderCompanyTotalsBlankFooterBand()}
-                  isWip
-                  title={STAGE4_COMMIT_DATA_WIP_NOTE}
+                  footer={renderStage4CoverageFooter(businessLine)}
+                  title={STAGE4_COVERAGE_TITLE_ALL}
                 />
 
                 <MetricCard
@@ -6434,6 +6829,8 @@ const productMixDrillRows = useMemo(() => {
         total={drillData.total}
         config={config}
         businessLine={businessLine}
+        amountColumnKey={waterfallAmountKey}
+        amountColumnLabel={waterfallCurrency === "ARR" ? "ARR" : "ACV"}
         onOpenDefinitions={openDefs}
       />
 
@@ -6563,6 +6960,16 @@ const productMixDrillRows = useMemo(() => {
         data={{ ...data, dv: companyVelocityModalData }}
         businessLine={businessLine}
         onOpenDefinitions={openDefs}
+      />
+
+      <BoardForecastCompareModal
+        open={boardCompareTarget != null}
+        onClose={closeBoardCompareModal}
+        target={boardCompareTarget}
+        boardAmount={boardForecastValue}
+        boardBasis={boardForecastBasis}
+        budgetAmount={budgetValue}
+        salesForecastAmount={forecastValue}
       />
 
       <ForecastAttainmentDrillModal

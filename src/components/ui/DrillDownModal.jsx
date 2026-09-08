@@ -15,6 +15,10 @@ export default function DrillDownModal({
   config,
   /** CEO toggle: "All" | "New Business" | "Gross Expansion" */
   businessLine = 'All',
+  /** Override amount column key (defaults to wf_amount / ACV). */
+  amountColumnKey = null,
+  /** Column header for the amount field. */
+  amountColumnLabel = 'ACV',
   contextHelper,
   definitionsSection = 'cro_waterfall',
   onOpenDefinitions,
@@ -32,7 +36,9 @@ export default function DrillDownModal({
     bizLine: resolveColumnKey(config?.wf_business_line),
     recordType: resolveColumnKey(config?.wf_record_type),
     createdQtr: resolveColumnKey(config?.wf_created_qtr),
-    amount: resolveColumnKey(config?.wf_amount)
+    amount:
+      amountColumnKey ||
+      resolveColumnKey(config?.wf_amount),
   };
 
   return (
@@ -93,7 +99,7 @@ export default function DrillDownModal({
                 <th style={styles.th}>Business Line</th>
                 <th style={styles.th}>Record Type</th>
                 <th style={styles.th}>Created Qtr</th>
-                <th style={styles.th}>ARR (ACV)</th>
+                <th style={styles.th}>{amountColumnLabel}</th>
               </tr>
             </thead>
             <tbody>
